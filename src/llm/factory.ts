@@ -1,55 +1,32 @@
 import type { LLMClient } from "./client.js";
 import { DeterministicLLMClient } from "./deterministic-client.js";
-import type { EpisodeExtraction, ReflectionOutput, ConsolidationOutput } from "./client.js";
-import {
-  FALLBACK_INTENT,
-  FALLBACK_ACTION,
-  FALLBACK_OUTCOME,
-  FALLBACK_LESSON,
-  DEFAULT_IMPORTANCE,
-  DEFAULT_CONFIDENCE,
-} from "../models/defaults.js";
+import { OpenAICompatibleLLMClient } from "./openai-compatible-client.js";
+import type { AppConfig } from "../config.js";
+import { getResolvedApiKey } from "../config.js";
 
-export function createLLMClient(provider: string): LLMClient {
+export { safeExtraction, safeReflection, safeConsolidation } from "./safe-outputs.js";
+
+export function createLLMClient(provider: string, config?: AppConfig): LLMClient {
   switch (provider) {
+    case "openai-compatible":
+      if (!config) throw new Error(`Provider "${provider}" requires configuration.`);
+      const apiKey = getResolvedApiKey(config);
+      if (!apiKey) {
+        throw new Error(
+          `Provider "${provider}" requires an API key. Set apiKey or apiKeyEnv in config, ` +
+          `or use the YUNLUO_API_KEY environment variable.`
+        );
+      }
+      return new OpenAICompatibleLLMClient({
+        baseUrl: config.baseUrl ?? "https://api.openai.com/v1",
+        apiKey,
+        model: config.model ?? "gpt-3.5-turbo",
+        temperature: config.temperature,
+        timeout: config.timeout,
+      });
     case "deterministic":
       return new DeterministicLLMClient();
-    case "openai":
-    case "claude":
-    case "qwen":
-    case "llama":
-      return new DeterministicLLMClient();
     default:
-      return new DeterministicLLMClient();
+      throw new Error(`Unknown provider: "${provider}". Supported providers: deterministic, openai-compatible.`);
   }
-}
-
-export function safeExtraction(raw: Partial<EpisodeExtraction> | null | undefined): EpisodeExtraction {
-  return {
-    intent: raw?.intent?.trim() || FALLBACK_INTENT,
-    action: raw?.action?.trim() || FALLBACK_ACTION,
-    outcome: raw?.outcome?.trim() || FALLBACK_OUTCOME,
-    lesson: raw?.lesson?.trim() || FALLBACK_LESSON,
-    importance: typeof raw?.importance === "number" && raw.importance >= 0 && raw.importance <= 1
-      ? raw.importance : DEFAULT_IMPORTANCE,
-    confidence: typeof raw?.confidence === "number" && raw.confidence >= 0 && raw.confidence <= 1
-      ? raw.confidence : DEFAULT_CONFIDENCE,
-  };
-}
-
-export function safeReflection(raw: Partial<ReflectionOutput> | null | undefined): ReflectionOutput {
-  return {
-    whatWorked: raw?.whatWorked?.trim() || "Response generated",
-    whatFailed: raw?.whatFailed?.trim() || "None identified",
-    lessons: raw?.lessons?.trim() || FALLBACK_LESSON,
-    updateCandidates: raw?.updateCandidates?.trim() || "[]",
-  };
-}
-
-export function safeConsolidation(raw: Partial<ConsolidationOutput> | null | undefined): ConsolidationOutput {
-  return {
-    semanticMemories: Array.isArray(raw?.semanticMemories) ? raw.semanticMemories : [],
-    userModelUpdates: Array.isArray(raw?.userModelUpdates) ? raw.userModelUpdates : [],
-    selfModelUpdates: Array.isArray(raw?.selfModelUpdates) ? raw.selfModelUpdates : [],
-  };
 }

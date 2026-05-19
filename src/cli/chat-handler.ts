@@ -1,16 +1,15 @@
 import { chatInputSchema } from "../models/schemas.js";
-import { loadConfig } from "../config.js";
+import { loadConfig, type AppConfig } from "../config.js";
 import { createDbConnection, closeDbConnection } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
 import { createLLMClient } from "../llm/factory.js";
 import { createAgentController } from "../agent/controller.js";
 
-export async function handleChat(options: {
-  session?: string;
-  message?: string;
-  json?: boolean;
-}): Promise<void> {
-  const config = loadConfig();
+export async function handleChat(
+  options: { session?: string; message?: string; json?: boolean },
+  cliOverrides?: Partial<AppConfig>,
+): Promise<void> {
+  const config = loadConfig(cliOverrides);
   const db = createDbConnection(config.databasePath);
   try {
     runMigrations(db);
@@ -52,7 +51,7 @@ async function processChat(
     return;
   }
 
-  const llm = createLLMClient(config.llmProvider);
+  const llm = createLLMClient(config.provider, config);
   const agent = createAgentController(llm, db);
   const result = await agent.chat(parsed.data.message, { sessionId: parsed.data.session ?? sessionId });
 

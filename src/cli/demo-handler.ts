@@ -11,7 +11,7 @@ export async function handleDemo(options: {
   const db = createDbConnection(config.databasePath);
   try {
     runMigrations(db);
-    const llm = createLLMClient(config.llmProvider);
+    const llm = createLLMClient(config.provider, config);
     const agent = createAgentController(llm, db);
     const sessionId = "demo-session";
 

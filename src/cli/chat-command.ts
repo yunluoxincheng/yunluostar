@@ -7,8 +7,11 @@ export function registerChatCommand(program: Command): void {
     .option("-s, --session <sessionId>", "Session identifier")
     .option("-m, --message <message>", "Chat message (non-interactive mode)")
     .option("--json", "Output result as JSON with trace identifiers")
-    .action(async (options) => {
+    .action(async (options, cmd) => {
       const { handleChat } = await import("./chat-handler.js");
-      await handleChat(options);
+      const { cliOverridesFromOpts } = await import("./index.js");
+      const globalOpts = cmd.parent?.opts() ?? {};
+      const cliOverrides = cliOverridesFromOpts(globalOpts);
+      await handleChat(options, cliOverrides);
     });
 }
