@@ -45,7 +45,7 @@ describe("InteractiveRouter", () => {
       const router = makeRouter();
       const result = await router.route("/model");
       expect(result.action).toBe("continue");
-      expect(result.output).toContain("Provider:");
+      expect(result.output).toContain("provider");
       expect(result.output).toContain("deterministic");
     });
 

@@ -60,7 +60,8 @@ export async function main(): Promise<void> {
   // global options with values (e.g. --provider deterministic chat ...)
   program.action(async () => {
     const { runInteractiveShell } = await import("./interactive-router.js");
-    await runInteractiveShell();
+    const overrides = cliOverridesFromOpts(program.opts());
+    await runInteractiveShell(overrides);
   });
 
   await program.parseAsync(process.argv);

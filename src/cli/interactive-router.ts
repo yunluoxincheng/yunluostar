@@ -4,15 +4,33 @@ import { createDbConnection, closeDbConnection } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
 import { createLLMClient } from "../llm/factory.js";
 import { createAgentController } from "../agent/controller.js";
+import type { PipelineStage } from "../agent/controller.js";
 import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
 import { createSelfModelRepository } from "../db/self-model-repository.js";
 import { createGoalsRepository } from "../db/goals-repository.js";
 import { createReflectionsRepository } from "../db/reflections-repository.js";
+import {
+  banner, promptStr, responsePrefix, responseContinue,
+  formatResponse, footerLine, renderMarkdown,
+  createSpinner, formatTrace, formatHelp, formatError,
+  formatModelInfo, formatConfigInfo,
+} from "./tui.js";
+import chalk from "chalk";
 
 export interface InteractiveCommandResult {
   action: "chat" | "exit" | "continue" | "error";
   output?: string;
 }
+
+const STAGE_LABELS: Record<PipelineStage, string> = {
+  awakening: "awakening...",
+  thinking: "thinking...",
+  recording: "recording...",
+  reflecting: "reflecting...",
+  consolidating: "consolidating...",
+  correcting: "resolving...",
+  done: "",
+};
 
 export class InteractiveRouter {
   private sessionId: string;
@@ -29,15 +47,8 @@ export class InteractiveRouter {
 
   async route(input: string): Promise<InteractiveCommandResult> {
     const trimmed = input.trim();
-
-    if (!trimmed) {
-      return { action: "continue" };
-    }
-
-    if (trimmed.startsWith("/")) {
-      return this.handleSlashCommand(trimmed);
-    }
-
+    if (!trimmed) return { action: "continue" };
+    if (trimmed.startsWith("/")) return this.handleSlashCommand(trimmed);
     return { action: "chat", output: trimmed };
   }
 
@@ -51,17 +62,22 @@ export class InteractiveRouter {
         return { action: "continue", output: formatHelp() };
       case "/exit":
       case "/quit":
-        return { action: "exit", output: "Goodbye!" };
+        return { action: "exit" };
       case "/config":
-        return { action: "continue", output: formatConfig(this.config) };
+        return { action: "continue", output: formatConfigInfo(redactConfig(this.config)) };
       case "/model":
-        return { action: "continue", output: formatModel(this.config) };
+        return { action: "continue", output: formatModelInfo({
+          provider: this.config.provider,
+          model: this.config.model,
+          baseUrl: this.config.baseUrl,
+          apiKeyResolved: !!getResolvedApiKey(this.config),
+        }) };
       case "/session":
         if (args.length === 0) {
-          return { action: "continue", output: `Current session: ${this.sessionId}` };
+          return { action: "continue", output: `  session: ${chalk.bold(this.sessionId)}` };
         }
         this.sessionId = args[0];
-        return { action: "continue", output: `Switched to session: ${this.sessionId}` };
+        return { action: "continue", output: `  switched to: ${chalk.bold(this.sessionId)}` };
       case "/memory":
         return { action: "continue", output: await this.inspectMemory() };
       case "/self":
@@ -71,7 +87,7 @@ export class InteractiveRouter {
       case "/reflections":
         return { action: "continue", output: await this.inspectReflections() };
       default:
-        return { action: "error", output: `Unknown command: ${command}. Type /help for available commands.` };
+        return { action: "error", output: `Unknown command: ${command}. Type /help for commands.` };
     }
   }
 
@@ -81,8 +97,8 @@ export class InteractiveRouter {
       runMigrations(db);
       const repo = createSemanticMemoriesRepository(db);
       const items = repo.findRecent(20);
-      if (items.length === 0) return "No memories yet.";
-      return items.map((m) => `- [${m.category}] ${m.content.slice(0, 100)}`).join("\n");
+      if (items.length === 0) return chalk.dim("  (no memories)");
+      return items.map((m) => `  ${chalk.bold(m.category ?? "general")}  ${chalk.dim(m.content.slice(0, 80))}`).join("\n");
     } finally {
       closeDbConnection(db);
     }
@@ -94,8 +110,8 @@ export class InteractiveRouter {
       runMigrations(db);
       const repo = createSelfModelRepository(db);
       const items = repo.findActive();
-      if (items.length === 0) return "No self model entries yet.";
-      return items.map((e) => `- ${e.trait}: ${e.value}`).join("\n");
+      if (items.length === 0) return chalk.dim("  (no self model entries)");
+      return items.map((e) => `  ${chalk.bold(e.trait)}  ${e.value}`).join("\n");
     } finally {
       closeDbConnection(db);
     }
@@ -107,8 +123,8 @@ export class InteractiveRouter {
       runMigrations(db);
       const repo = createGoalsRepository(db);
       const items = repo.findActive();
-      if (items.length === 0) return "No active goals.";
-      return items.map((g) => `- [${g.status}] ${g.description}`).join("\n");
+      if (items.length === 0) return chalk.dim("  (no active goals)");
+      return items.map((g) => `  ${chalk.bold(`[${g.status}]`)}  ${g.description}`).join("\n");
     } finally {
       closeDbConnection(db);
     }
@@ -120,54 +136,38 @@ export class InteractiveRouter {
       runMigrations(db);
       const repo = createReflectionsRepository(db);
       const items = repo.findRecent(10);
-      if (items.length === 0) return "No reflections yet.";
-      return items.map((r) => `- ${(r.whatWorked ?? "").slice(0, 80)}`).join("\n");
+      if (items.length === 0) return chalk.dim("  (no reflections)");
+      return items.map((r) => `  ${(r.whatWorked ?? "").slice(0, 80)}`).join("\n");
     } finally {
       closeDbConnection(db);
     }
   }
 }
 
-function formatHelp(): string {
-  return [
-    "Available commands:",
-    "  /help          Show this help message",
-    "  /exit, /quit   Exit the interactive shell",
-    "  /config        Display effective configuration (secrets redacted)",
-    "  /model         Display active provider and model info",
-    "  /session [id]  Show or switch the active session",
-    "  /memory        Show recent semantic memories (read-only)",
-    "  /self          Show active self model entries (read-only)",
-    "  /goals         Show active goals (read-only)",
-    "  /reflections   Show recent reflections (read-only)",
-    "",
-    "  Any other input is sent as a chat message.",
-  ].join("\n");
-}
-
-function formatConfig(config: AppConfig): string {
-  return JSON.stringify(redactConfig(config), null, 2);
-}
-
-function formatModel(config: AppConfig): string {
-  const keyConfigured = getResolvedApiKey(config) ? "yes" : "no";
-  return [
-    `Provider:  ${config.provider}`,
-    `Model:     ${config.model ?? "(default)"}`,
-    `Base URL:  ${config.baseUrl ?? "(default)"}`,
-    `Key:       ${keyConfigured === "yes" ? "configured" : "not configured"}`,
-  ].join("\n");
-}
+// ─── Interactive Shell ────────────────────────────────────────
 
 export async function runInteractiveShell(cliOverrides?: Partial<AppConfig>): Promise<void> {
   const config = loadConfig(cliOverrides);
   const router = new InteractiveRouter(config);
+  const modelLabel = config.model ?? config.provider;
+
+  console.log(banner("0.1.0", config.provider, config.model ?? "default"));
+  console.log(chalk.dim("  Type /help for commands · /exit to quit"));
+  console.log("");
 
   const readline = await import("node:readline");
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: "yunluo> ",
+    prompt: promptStr(),
+    historySize: 100,
+    removeHistoryDuplicates: true,
+  });
+
+  rl.on("SIGINT", () => {
+    console.log(chalk.dim("\n  Bye.\n"));
+    rl.close();
+    process.exit(0);
   });
 
   rl.prompt();
@@ -177,35 +177,81 @@ export async function runInteractiveShell(cliOverrides?: Partial<AppConfig>): Pr
 
     switch (result.action) {
       case "exit":
-        console.log(result.output ?? "Goodbye!");
+        console.log(chalk.dim("  Bye."));
         rl.close();
         break;
       case "chat":
         if (result.output) {
-          await processChat(result.output, router.getSessionId(), config);
+          await processChat(result.output, router.getSessionId(), config, modelLabel);
         }
         rl.prompt();
         break;
       case "continue":
         if (result.output) console.log(result.output);
+        console.log("");
         rl.prompt();
         break;
       case "error":
-        console.log(result.output ?? "Unknown error");
+        console.log(formatError(result.output ?? "Unknown error"));
+        console.log("");
         rl.prompt();
         break;
     }
   });
 }
 
-async function processChat(message: string, sessionId: string, config: AppConfig): Promise<void> {
+async function processChat(
+  message: string,
+  sessionId: string,
+  config: AppConfig,
+  modelLabel: string,
+): Promise<void> {
+  const spinner = createSpinner();
+  let responseStarted = false;
+
   const db = createDbConnection(config.databasePath);
   try {
     runMigrations(db);
     const llm = createLLMClient(config.provider, config);
     const agent = createAgentController(llm, db);
-    const result = await agent.chat(message, { sessionId });
-    console.log(`\nAgent: ${result.response}`);
+
+    let firstToken = true;
+
+    const result = await agent.chat(message, {
+      sessionId,
+      onToken: (token: string) => {
+        if (firstToken) {
+          spinner.stop();
+          firstToken = false;
+          responseStarted = true;
+          process.stdout.write(responsePrefix());
+        }
+        process.stdout.write(token);
+      },
+      onStage: (stage: PipelineStage) => {
+        if (responseStarted) return;
+        const label = STAGE_LABELS[stage];
+        if (label) spinner.start(label);
+      },
+    });
+
+    if (!responseStarted) {
+      spinner.stop();
+      const rendered = renderMarkdown(result.response);
+      console.log(responsePrefix() + formatResponse(rendered));
+    } else {
+      process.stdout.write("\n");
+    }
+
+    // Compact trace + footer
+    const trace = formatTrace(result.trace);
+    if (trace) console.log(trace);
+    console.log(footerLine(modelLabel, sessionId));
+    console.log("");
+  } catch (err) {
+    spinner.stop();
+    console.log(formatError((err as Error).message));
+    console.log("");
   } finally {
     closeDbConnection(db);
   }

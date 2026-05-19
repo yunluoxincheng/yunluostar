@@ -7,6 +7,7 @@ interface OpenAICompatibleConfig {
   model: string;
   temperature?: number;
   timeout?: number;
+  maxRetries?: number;
 }
 
 interface ChatMessage {
@@ -17,7 +18,20 @@ interface ChatMessage {
 interface ChatCompletionResponse {
   choices?: Array<{
     message?: { content?: string };
+    delta?: { content?: string };
   }>;
+}
+
+const DEFAULT_MAX_RETRIES = 3;
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRetryableError(err: Error): boolean {
+  if (err.message.includes("401") || err.message.includes("403")) return false;
+  return true;
 }
 
 export class OpenAICompatibleLLMClient implements LLMClient {
@@ -27,13 +41,18 @@ export class OpenAICompatibleLLMClient implements LLMClient {
     this.config = config;
   }
 
-  async generateResponse(context: string, userInput: string): Promise<string> {
+  async generateResponse(context: string, userInput: string, onToken?: (token: string) => void): Promise<string> {
     const messages: ChatMessage[] = [];
     if (context.trim()) {
       messages.push({ role: "system", content: context });
     }
     messages.push({ role: "user", content: userInput });
-    const data = await this.request(messages);
+
+    if (onToken) {
+      return this.executeWithRetry(() => this.streamingRequest(messages, onToken));
+    }
+
+    const data = await this.executeWithRetry(() => this.jsonRequest(messages));
     return data?.choices?.[0]?.message?.content?.trim() ?? "No response generated.";
   }
 
@@ -47,7 +66,7 @@ export class OpenAICompatibleLLMClient implements LLMClient {
       },
       { role: "user", content: `User: ${userInput}\nAgent: ${agentResponse}` },
     ];
-    const data = await this.request(messages);
+    const data = await this.executeWithRetry(() => this.jsonRequest(messages));
     return safeExtraction(parseJsonPartial(data?.choices?.[0]?.message?.content));
   }
 
@@ -64,7 +83,7 @@ export class OpenAICompatibleLLMClient implements LLMClient {
         content: `User: ${userInput}\nAgent: ${agentResponse}\nContext: ${context}`,
       },
     ];
-    const data = await this.request(messages);
+    const data = await this.executeWithRetry(() => this.jsonRequest(messages));
     return safeReflection(parseJsonPartial(data?.choices?.[0]?.message?.content));
   }
 
@@ -81,30 +100,41 @@ export class OpenAICompatibleLLMClient implements LLMClient {
         content: `Episode: ${JSON.stringify(episode)}\nReflection: ${JSON.stringify(reflection)}`,
       },
     ];
-    const data = await this.request(messages);
+    const data = await this.executeWithRetry(() => this.jsonRequest(messages));
     return safeConsolidation(parseJsonPartial(data?.choices?.[0]?.message?.content));
   }
 
-  private async request(messages: ChatMessage[]): Promise<ChatCompletionResponse> {
+  private async executeWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    const maxRetries = this.config.maxRetries ?? DEFAULT_MAX_RETRIES;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        lastError = error;
+
+        if (attempt < maxRetries && isRetryableError(error)) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10_000);
+          await sleep(delay);
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError ?? new Error("LLM request failed after retries");
+  }
+
+  private async jsonRequest(messages: ChatMessage[]): Promise<ChatCompletionResponse> {
     const controller = new AbortController();
     const timeoutId = this.config.timeout
       ? setTimeout(() => controller.abort(), this.config.timeout)
       : undefined;
 
     try {
-      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.config.model,
-          messages,
-          ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}),
-        }),
-        signal: controller.signal,
-      });
+      const response = await this.fetch(messages, false, controller.signal);
 
       if (!response.ok) {
         const body = await response.text().catch(() => "");
@@ -113,14 +143,106 @@ export class OpenAICompatibleLLMClient implements LLMClient {
 
       return (await response.json()) as ChatCompletionResponse;
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        throw new Error(`LLM request timed out after ${this.config.timeout}ms`);
-      }
-      if (err instanceof Error && err.message.startsWith("LLM request")) throw err;
-      throw new Error(`LLM request failed: ${(err as Error).message}`);
+      throw this.wrapIfAbort(err);
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
     }
+  }
+
+  private async streamingRequest(messages: ChatMessage[], onToken: (token: string) => void): Promise<string> {
+    const controller = new AbortController();
+    const timeoutId = this.config.timeout
+      ? setTimeout(() => controller.abort(), (this.config.timeout ?? 60_000) * 3)
+      : undefined;
+
+    try {
+      const response = await this.fetch(messages, true, controller.signal);
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`LLM request failed: ${response.status} ${response.statusText}${body ? ` - ${body.slice(0, 200)}` : ""}`);
+      }
+
+      const fullText = await this.readSSE(response, onToken);
+      return fullText.trim() || "No response generated.";
+    } catch (err) {
+      throw this.wrapIfAbort(err);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  private async fetch(messages: ChatMessage[], stream: boolean, signal: AbortSignal): Promise<Response> {
+    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        messages,
+        ...(stream ? { stream: true } : {}),
+        ...(this.config.temperature !== undefined ? { temperature: this.config.temperature } : {}),
+      }),
+      signal,
+    });
+    return response;
+  }
+
+  private wrapIfAbort(err: unknown): Error {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return new Error(`LLM request timed out after ${this.config.timeout}ms`);
+    }
+    if (err instanceof Error && !err.message.startsWith("LLM request")) {
+      return new Error(`LLM request failed: ${err.message}`);
+    }
+    return err instanceof Error ? err : new Error(String(err));
+  }
+
+  private async readSSE(response: Response, onToken: (token: string) => void): Promise<string> {
+    const body = response.body;
+    if (!body) throw new Error("Streaming response has no body");
+
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "data: [DONE]") continue;
+          if (!trimmed.startsWith("data: ")) continue;
+
+          const jsonStr = trimmed.slice(6);
+          try {
+            const parsed = JSON.parse(jsonStr) as {
+              choices?: Array<{ delta?: { content?: string } }>;
+            };
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              fullText += content;
+              onToken(content);
+            }
+          } catch {
+            // Skip malformed SSE lines
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return fullText;
   }
 }
 

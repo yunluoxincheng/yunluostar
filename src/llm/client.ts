@@ -37,7 +37,7 @@ export interface ConsolidationOutput {
 }
 
 export interface LLMClient {
-  generateResponse(context: string, userInput: string): Promise<string>;
+  generateResponse(context: string, userInput: string, onToken?: (token: string) => void): Promise<string>;
   extractEpisode(userInput: string, agentResponse: string): Promise<EpisodeExtraction>;
   reflect(userInput: string, agentResponse: string, context: string): Promise<ReflectionOutput>;
   consolidate(episode: EpisodeExtraction, reflection: ReflectionOutput): Promise<ConsolidationOutput>;

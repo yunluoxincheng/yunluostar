@@ -1,13 +1,22 @@
 import type { LLMClient, EpisodeExtraction, ReflectionOutput, ConsolidationOutput } from "./client.js";
 
 export class DeterministicLLMClient implements LLMClient {
-  async generateResponse(context: string, userInput: string): Promise<string> {
-    const contextParts: string[] = [];
+  async generateResponse(context: string, userInput: string, onToken?: (token: string) => void): Promise<string> {
+    const parts: string[] = [];
     if (context.trim()) {
-      contextParts.push(`[Context: ${context}]`);
+      parts.push(`[Context: ${context}]`);
     }
-    contextParts.push(`Response to: ${userInput}`);
-    return contextParts.join(" ");
+    parts.push(`Response to: ${userInput}`);
+    const full = parts.join(" ");
+
+    if (onToken) {
+      const words = full.split(" ");
+      for (let i = 0; i < words.length; i++) {
+        const token = i === 0 ? words[i] : " " + words[i];
+        onToken(token);
+      }
+    }
+    return full;
   }
 
   async extractEpisode(userInput: string, agentResponse: string): Promise<EpisodeExtraction> {

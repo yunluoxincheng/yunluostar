@@ -18,7 +18,18 @@ import type { ChatTrace } from "../models/schemas.js";
 
 export interface AgentConfig {
   sessionId: string;
+  onToken?: (token: string) => void;
+  onStage?: (stage: PipelineStage) => void;
 }
+
+export type PipelineStage =
+  | "awakening"
+  | "thinking"
+  | "recording"
+  | "reflecting"
+  | "consolidating"
+  | "correcting"
+  | "done";
 
 export interface AgentResult {
   response: string;
@@ -36,6 +47,9 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
 
   return {
     async chat(userInput: string, config: AgentConfig): Promise<AgentResult> {
+      const { onStage } = config;
+
+      onStage?.("awakening");
       const awakened = await awakenMemories(
         userInput,
         semanticMemoriesRepo,
@@ -45,8 +59,11 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
       );
 
       const cognitiveContext = buildCognitiveContext(awakened);
-      const response = await llm.generateResponse(cognitiveContext, userInput);
 
+      onStage?.("thinking");
+      const response = await llm.generateResponse(cognitiveContext, userInput, config.onToken);
+
+      onStage?.("recording");
       const { episodeId, extraction } = await recordEpisode(llm, episodesRepo, auditRepo, {
         sessionId: config.sessionId,
         userInput,
@@ -58,6 +75,7 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
       trace.appliedUserModelIds = awakened.userModelEntries.map((e) => e.id);
       trace.appliedSelfModelIds = awakened.selfModelEntries.map((e) => e.id);
 
+      onStage?.("reflecting");
       const { reflectionId, reflection: reflectionOutput } = await reflectAndPersist(llm, reflectionsRepo, auditRepo, {
         episodeId,
         userInput,
@@ -67,12 +85,14 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
       });
       trace.reflectionId = reflectionId;
 
+      onStage?.("consolidating");
       const consolidationResult = await consolidate(llm, semanticMemoriesRepo, userModelRepo, selfModelRepo, auditRepo, {
         episodeId,
         extraction,
         reflectionOutput,
       });
 
+      onStage?.("correcting");
       for (const newId of consolidationResult.userModelIds) {
         const newEntry = userModelRepo.findById(newId);
         if (!newEntry) continue;
@@ -99,6 +119,7 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
         }
       }
 
+      onStage?.("done");
       return { response, trace };
     },
   };

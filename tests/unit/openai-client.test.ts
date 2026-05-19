@@ -13,12 +13,13 @@ afterEach(() => {
   mockFetch.mockReset();
 });
 
-function makeClient(overrides?: { timeout?: number }) {
+function makeClient(overrides?: { timeout?: number; maxRetries?: number }) {
   return new OpenAICompatibleLLMClient({
     baseUrl: "https://api.test.com/v1",
     apiKey: "test-key",
     model: "test-model",
     temperature: 0.7,
+    maxRetries: 0,
     ...overrides,
   });
 }
@@ -33,6 +34,26 @@ function mockResponse(content: string, status = 200) {
     }),
     text: () => Promise.resolve(""),
   } as Response);
+}
+
+function mockStreamResponse(chunks: string[]) {
+  const lines = chunks.map(c => `data: ${JSON.stringify({ choices: [{ delta: { content: c } }] })}`).join("\n");
+  const body = lines + "\ndata: [DONE]\n";
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(body));
+      controller.close();
+    },
+  });
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    body: stream,
+    text: () => Promise.resolve(""),
+    json: () => Promise.resolve({}),
+  } as unknown as Response);
 }
 
 describe("OpenAICompatibleLLMClient", () => {
@@ -163,7 +184,7 @@ describe("OpenAICompatibleLLMClient", () => {
   });
 
   it("throws on timeout", async () => {
-    mockFetch.mockImplementation((_url: string, init: RequestInit) => {
+    mockFetch.mockImplementation((_url: string, _init: RequestInit) => {
       return new Promise((_, reject) => {
         setTimeout(() => {
           const err = new DOMException("The operation was aborted", "AbortError");
@@ -174,6 +195,71 @@ describe("OpenAICompatibleLLMClient", () => {
 
     const client = makeClient({ timeout: 5 });
     await expect(client.generateResponse("", "Hi")).rejects.toThrow("timed out");
+  });
+
+  it("retries on 429 and succeeds", async () => {
+    const errorResponse = {
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+      text: () => Promise.resolve("Rate limited"),
+    };
+    mockFetch
+      .mockReturnValueOnce(Promise.resolve(errorResponse as Response))
+      .mockReturnValueOnce(mockResponse("Success after retry"));
+
+    const client = makeClient({ maxRetries: 2 });
+    const result = await client.generateResponse("", "Hi");
+
+    expect(result).toBe("Success after retry");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries on 503 up to maxRetries then throws", async () => {
+    const errorResponse = {
+      ok: false,
+      status: 503,
+      statusText: "Service Unavailable",
+      text: () => Promise.resolve(""),
+    };
+    mockFetch.mockReturnValue(Promise.resolve(errorResponse as Response));
+
+    const client = makeClient({ maxRetries: 1 });
+    await expect(client.generateResponse("", "Hi")).rejects.toThrow("503");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry on 401", async () => {
+    mockFetch.mockReturnValue(Promise.resolve({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: () => Promise.resolve("Bad key"),
+    } as Response));
+
+    const client = makeClient({ maxRetries: 3 });
+    await expect(client.generateResponse("", "Hi")).rejects.toThrow("401");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("streams tokens via onToken callback", async () => {
+    mockFetch.mockReturnValue(mockStreamResponse(["Hello", " world", "!"]));
+
+    const tokens: string[] = [];
+    const client = makeClient();
+    const result = await client.generateResponse("", "Hi", (token) => tokens.push(token));
+
+    expect(result).toBe("Hello world!");
+    expect(tokens).toEqual(["Hello", " world", "!"]);
+  });
+
+  it("falls back when stream produces no content", async () => {
+    mockFetch.mockReturnValue(mockStreamResponse([]));
+
+    const client = makeClient();
+    const result = await client.generateResponse("", "Hi");
+
+    expect(result).toBe("No response generated.");
   });
 });
 
