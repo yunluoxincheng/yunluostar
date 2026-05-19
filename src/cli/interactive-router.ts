@@ -23,12 +23,12 @@ export interface InteractiveCommandResult {
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  awakening: "awakening...",
-  thinking: "thinking...",
-  recording: "recording...",
-  reflecting: "reflecting...",
-  consolidating: "consolidating...",
-  correcting: "resolving...",
+  awakening: "awakening relevant memory...",
+  thinking: "integrating context...",
+  recording: "recording episode...",
+  reflecting: "running metacognition...",
+  consolidating: "consolidating memory...",
+  correcting: "resolving correction...",
   done: "",
 };
 
@@ -152,7 +152,7 @@ export async function runInteractiveShell(cliOverrides?: Partial<AppConfig>): Pr
   const modelLabel = config.model ?? config.provider;
 
   console.log(banner("0.1.0", config.provider, config.model ?? "default"));
-  console.log(chalk.dim("  Type /help for commands · /exit to quit"));
+  console.log(chalk.dim("  /help command surface · /exit close loop"));
   console.log("");
 
   const readline = await import("node:readline");
