@@ -1,12 +1,12 @@
 ## ADDED Requirements
 
-### Requirement: Chat interaction endpoint
+### Requirement: CLI chat interaction
 
-The system SHALL expose a chat interaction endpoint that accepts a session identifier and user message, returns an assistant response with lightweight trace identifiers, and runs the MVP memory/reflection loop for that interaction.
+The system SHALL expose a CLI chat command that accepts a session identifier and user message, returns an assistant response with lightweight trace identifiers, and runs the MVP memory/reflection loop for that interaction.
 
 #### Scenario: Successful chat response
 
-- **WHEN** a client submits a valid session identifier and user message to the chat endpoint
+- **WHEN** a user runs the chat command with a valid session identifier and user message
 - **THEN** the system returns an assistant response associated with the same session
 
 #### Scenario: Chat response includes trace identifiers
@@ -16,7 +16,7 @@ The system SHALL expose a chat interaction endpoint that accepts a session ident
 
 #### Scenario: Empty message rejected
 
-- **WHEN** a client submits an empty or whitespace-only user message
+- **WHEN** a user runs the chat command with an empty or whitespace-only message
 - **THEN** the system rejects the request with a validation error and does not create an episode
 
 ### Requirement: Episode recording
@@ -110,17 +110,27 @@ The system SHALL preserve correction history when user feedback invalidates a st
 
 ### Requirement: Inspectable internal state
 
-The system SHALL provide read-only inspection access for recent episodes, semantic memories, user model entries, self model entries, and reflections.
+The system SHALL provide read-only CLI inspection commands for recent episodes, semantic memories, user model entries, self model entries, goals, and reflections.
 
 #### Scenario: Inspect recent episodes
 
-- **WHEN** a client requests recent episodes for a session
+- **WHEN** a user runs a read-only CLI command to inspect recent episodes for a session
 - **THEN** the system returns the persisted episode summaries without modifying state
 
 #### Scenario: Inspect model state
 
-- **WHEN** a client requests current user or self model state
+- **WHEN** a user runs a read-only CLI command to inspect current user or self model state
 - **THEN** the system returns stored model entries with confidence and evidence
+
+#### Scenario: Inspect goals and reflections
+
+- **WHEN** a user runs a read-only CLI command to inspect goals or reflections
+- **THEN** the system returns persisted goal or reflection summaries without modifying state
+
+#### Scenario: Goal inspection is read-only
+
+- **WHEN** a user runs the CLI goal inspection command
+- **THEN** the system does not create, reprioritize, or mutate goals as a side effect
 
 ### Requirement: Deterministic development mode
 
@@ -135,6 +145,20 @@ The system SHALL support a deterministic local mode that can complete response g
 
 - **WHEN** an external LLM provider is configured later
 - **THEN** the controller still uses the same LLM client interface for generation, extraction, and reflection
+
+### Requirement: npm-managed TypeScript CLI project
+
+The system SHALL be implemented as a TypeScript / Node.js CLI project managed with npm scripts.
+
+#### Scenario: CLI command runs through npm
+
+- **WHEN** a user runs `npm run cli -- chat` with valid input
+- **THEN** the CLI invokes the agent runtime and completes the chat interaction
+
+#### Scenario: Tests run through npm
+
+- **WHEN** a developer runs the configured npm test command
+- **THEN** the Vitest test suite runs without requiring external LLM credentials
 
 ### Requirement: Past feedback changes future behavior
 

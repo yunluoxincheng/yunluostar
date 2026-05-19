@@ -125,7 +125,7 @@ semantic_similarity
 第一版只需要：
 
 - SQLite / PostgreSQL 存结构化记忆。
-- Chroma / Qdrant 存 embedding。
+- sqlite-vec 存 embedding；LanceDB / Chroma JS client / Qdrant 作为后续可选方案。
 - LLM 做记忆抽取、总结和巩固。
 - 每次对话结束后运行 memory_consolidator。
 - 下一次对话前运行 memory_awakener。

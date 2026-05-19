@@ -16,11 +16,14 @@
 
 ## Sprint 1：项目初始化
 
-- [ ] 创建 Python 项目结构。
-- [ ] 配置 FastAPI。
+- [ ] 创建 TypeScript / Node.js 项目结构。
+- [ ] 配置 CLI 入口。
+- [ ] 配置 `npm run cli -- ...` 命令脚本。
 - [ ] 配置 SQLite。
+- [ ] 配置 Drizzle schema 与 migration。
 - [ ] 配置 LLM client。
-- [ ] 创建基础配置文件。
+- [ ] 使用 Zod 创建基础配置校验。
+- [ ] 配置 Vitest。
 - [ ] 写 README。
 
 ## Sprint 2：数据库与记忆表
@@ -90,6 +93,7 @@
 ## Sprint 10：集成测试
 
 - [ ] 测试 10 轮连续对话。
+- [ ] 通过 CLI 运行 memory loop demo。
 - [ ] 检查 Agent 是否记住长期目标。
 - [ ] 检查 Agent 是否能引用过去讨论。
 - [ ] 检查用户反馈是否改变回答策略。
@@ -104,3 +108,4 @@
 - [ ] Agent 能在回答前检索相关经历。
 - [ ] Agent 能在回答后反思。
 - [ ] Agent 的行为能被过去经历影响。
+- [ ] CLI 能查看 memories、self model、goals 和 reflections。

@@ -10,14 +10,16 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## 技术栈 (MVP)
 
-- **语言**: Python 3.11+
-- **Web 框架**: FastAPI
-- **数据库**: SQLite (结构化), Chroma (向量检索)
-- **LLM**: OpenAI / Codex / Qwen / Llama API
-- **ORM**: SQLAlchemy
-- **数据校验**: Pydantic
+- **语言 / 运行时**: TypeScript + Node.js 20+
+- **产品形态**: CLI-first 本地主体型 Agent
+- **CLI**: Commander
+- **数据库**: SQLite (结构化), sqlite-vec (向量检索优先方案)
+- **LLM**: OpenAI / Claude / Codex / Qwen / Llama API
+- **ORM / Query Builder**: Drizzle ORM
+- **数据校验**: Zod
+- **测试**: Vitest
 
-进阶方向：PostgreSQL、Qdrant/Milvus、Neo4j、Redis、Celery、Docker Compose、LangGraph/LlamaIndex
+进阶方向：Hono/Fastify API、React/Vue 可视化控制台、Electron/Tauri 桌面端、PostgreSQL、LanceDB/Chroma/Qdrant/Milvus、Neo4j、Redis、任务调度器、Docker Compose、LangGraph.js / 自研 Agent Controller
 
 ## 架构：一次完整交互流程
 
@@ -35,17 +37,18 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 ## 工程目录结构 (规划)
 
 ```
-conscious_agent/
-  app/              # FastAPI 入口、配置
+src/
+  cli/              # CLI 入口与命令：chat, memory, self, goals, demo
   agent/            # controller, input_interpreter, cognitive_integrator
   memory/           # memory_store, memory_awakener, memory_consolidator, episodic/semantic/self_memory
   models/           # working_memory, self_model, user_model, goal, world_model
   planning/         # planner, action_executor, plan_evaluator
   metacognition/    # monitor, reflector
-  database/         # schema.sql, repository
-  llm/              # client, prompts
-  tests/
-  scripts/          # init_db, run_demo
+  db/               # schema, migrations, repositories
+  llm/              # client, prompts, structured output schemas
+  evals/            # 多轮评估脚本
+tests/
+scripts/            # init-db, run-demo
 ```
 
 ## 分阶段开发路线

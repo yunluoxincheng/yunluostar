@@ -22,21 +22,24 @@ yunluostar 把 Agent 从 `LLM + Prompt + Tools + RAG` 的任务执行器，升�
 
 | 层 | 选型 |
 |---|------|
-| 语言 | Python 3.11+ |
-| Web 框架 | FastAPI |
+| 语言 / 运行时 | TypeScript + Node.js 20+ |
+| 产品形态 | CLI-first 本地主体型 Agent |
+| CLI | Commander |
 | 结构化存储 | SQLite |
-| 向量检索 | Chroma |
+| 向量检索 | sqlite-vec 优先，LanceDB / Chroma JS client 后续可选 |
 | LLM | OpenAI / Claude / Qwen / Llama API |
-| ORM | SQLAlchemy |
-| 数据校验 | Pydantic |
+| ORM / Query Builder | Drizzle ORM |
+| 数据校验 | Zod |
+| 测试 | Vitest |
+| Web / API | Hono / Fastify / React / Vue，后续可选 |
 
 ## 快速开始 (规划中)
 
 ```bash
 # 项目初始化后可用
-pip install -r requirements.txt
-python scripts/init_db.py
-uvicorn app.main:app --reload
+npm install
+npm run cli -- chat
+npm run cli -- memory list
 ```
 
 ## 项目状态
