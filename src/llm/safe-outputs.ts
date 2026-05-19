@@ -8,12 +8,18 @@ import {
   DEFAULT_CONFIDENCE,
 } from "../models/defaults.js";
 
+function asString(val: unknown, fallback: string): string {
+  if (typeof val === "string") return val.trim() || fallback;
+  if (val != null) return String(val);
+  return fallback;
+}
+
 export function safeExtraction(raw: Partial<EpisodeExtraction> | null | undefined): EpisodeExtraction {
   return {
-    intent: raw?.intent?.trim() || FALLBACK_INTENT,
-    action: raw?.action?.trim() || FALLBACK_ACTION,
-    outcome: raw?.outcome?.trim() || FALLBACK_OUTCOME,
-    lesson: raw?.lesson?.trim() || FALLBACK_LESSON,
+    intent: asString(raw?.intent, FALLBACK_INTENT),
+    action: asString(raw?.action, FALLBACK_ACTION),
+    outcome: asString(raw?.outcome, FALLBACK_OUTCOME),
+    lesson: asString(raw?.lesson, FALLBACK_LESSON),
     importance: typeof raw?.importance === "number" && raw.importance >= 0 && raw.importance <= 1
       ? raw.importance : DEFAULT_IMPORTANCE,
     confidence: typeof raw?.confidence === "number" && raw.confidence >= 0 && raw.confidence <= 1
@@ -23,10 +29,10 @@ export function safeExtraction(raw: Partial<EpisodeExtraction> | null | undefine
 
 export function safeReflection(raw: Partial<ReflectionOutput> | null | undefined): ReflectionOutput {
   return {
-    whatWorked: raw?.whatWorked?.trim() || "Response generated",
-    whatFailed: raw?.whatFailed?.trim() || "None identified",
-    lessons: raw?.lessons?.trim() || FALLBACK_LESSON,
-    updateCandidates: raw?.updateCandidates?.trim() || "[]",
+    whatWorked: asString(raw?.whatWorked, "Response generated"),
+    whatFailed: asString(raw?.whatFailed, "None identified"),
+    lessons: asString(raw?.lessons, FALLBACK_LESSON),
+    updateCandidates: asString(raw?.updateCandidates, "[]"),
   };
 }
 
