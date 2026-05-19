@@ -1,0 +1,34 @@
+{
+  "name": "yunluostar",
+  "version": "0.1.0",
+  "description": "A consciousness-like agent prototype with long-term memory, self-model, goal system, and reflection",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "cli": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:init": "tsx scripts/init-db.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "lint": "tsc --noEmit",
+    "demo": "tsx src/cli/index.ts demo"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "commander": "^13.1.0",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "drizzle-kit": "^0.31.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}
