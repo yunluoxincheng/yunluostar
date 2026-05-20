@@ -45,4 +45,20 @@ describe("safeReflection with workingMemoryUpdate", () => {
     });
     expect(result.workingMemoryUpdate).toBeUndefined();
   });
+
+  it("filters non-string elements from arrays in workingMemoryUpdate", () => {
+    const result = safeReflection({
+      whatWorked: "ok",
+      whatFailed: "none",
+      lessons: "learned",
+      updateCandidates: "[]",
+      workingMemoryUpdate: {
+        active_hypotheses: ["valid", 42, null, "also valid"] as unknown as string[],
+        open_questions: [1, 2] as unknown as string[],
+        risk_flags: [],
+      },
+    });
+    expect(result.workingMemoryUpdate!.active_hypotheses).toEqual(["valid", "also valid"]);
+    expect(result.workingMemoryUpdate!.open_questions).toEqual([]);
+  });
 });

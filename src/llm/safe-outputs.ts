@@ -40,9 +40,9 @@ export function safeReflection(raw: Partial<ReflectionOutput> | null | undefined
       ? {
           current_goal: typeof update.current_goal === "string" ? update.current_goal : update.current_goal === null ? null : undefined,
           current_context: typeof update.current_context === "string" ? update.current_context : undefined,
-          active_hypotheses: Array.isArray(update.active_hypotheses) ? update.active_hypotheses : undefined,
-          open_questions: Array.isArray(update.open_questions) ? update.open_questions : undefined,
-          risk_flags: Array.isArray(update.risk_flags) ? update.risk_flags : undefined,
+          active_hypotheses: Array.isArray(update.active_hypotheses) ? update.active_hypotheses.filter((h: unknown): h is string => typeof h === "string") : undefined,
+          open_questions: Array.isArray(update.open_questions) ? update.open_questions.filter((q: unknown): q is string => typeof q === "string") : undefined,
+          risk_flags: Array.isArray(update.risk_flags) ? update.risk_flags.filter((r: unknown): r is string => typeof r === "string") : undefined,
         }
       : undefined,
   };
