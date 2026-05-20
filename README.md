@@ -76,6 +76,9 @@ yunluo self
 # 查看目标
 yunluo goals
 
+# 进入交互式 shell；进入后可输入 /wm 查看工作记忆
+yunluo
+
 # 查看反思记录
 yunluo reflections
 
@@ -102,6 +105,7 @@ Available commands:
   /model         Display active provider and model info
   /session [id]  Show or switch the active session
   /memory        Show recent semantic memories (read-only)
+  /wm            Show latest working memory snapshot (read-only)
   /self          Show active self model entries (read-only)
   /goals         Show active goals (read-only)
   /reflections   Show recent reflections (read-only)
@@ -166,16 +170,28 @@ npm run test:coverage
 
 ## 项目状态
 
-当前处于 **阶段 1：Cognitive RAG — 结构化长期记忆**。MVP 记忆反思循环已实现，包括：
+当前已完成 **阶段 1：Cognitive RAG — 结构化长期记忆**，并已落地 **阶段 2：Working Memory — 当前状态维护** 的 MVP 能力。下一步建议进入 **Goal System — 长期目标管理**。
+
+已实现能力包括：
 
 - CLI 对话命令（支持 `--message`、`--session`、`--json`）
+- 默认交互式 shell 与项目风格化 TUI
+- OpenAI-compatible provider 配置与 deterministic 本地模式
 - 情节记忆录制与语义记忆提取
 - 用户模型和自我模型的自动更新
 - 后交互反思与记忆巩固
-- 记忆唤醒（检索相关记忆影响后续回答）
+- 记忆唤醒（支持 embedding / sqlite-vec 语义检索与复合评分）
+- 工作记忆快照（恢复、注入认知上下文、保存、只读查看）
 - 修正处理（过期记忆降级与替代）
 - 审计日志追踪所有状态变更
-- 只读检查命令（memory、self、goals、reflections）
+- 只读检查命令（memory、wm、self、goals、reflections）
+
+尚未完成的核心能力：
+
+- 目标系统：目标分层、优先级、建议目标、审批与冲突检测
+- 规划与行动系统：多步骤计划、执行日志、失败恢复
+- 世界模型：行动后果预测与风险推演
+- 持续运行闭环：长期定期反思、目标维护和跨天连续性
 
 完整路线图见 [分阶段开发路线](docs/conscious_agent_plan/11_分阶段开发路线.md)。
 
