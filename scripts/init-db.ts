@@ -10,4 +10,4 @@ runMigrations(db);
 closeDbConnection(db);
 
 console.log("Database initialized successfully. Tables created:");
-console.log("  episodes, semantic_memories, user_model, self_model, goals, reflections, audit_logs");
+console.log("  episodes, semantic_memories, user_model, self_model, goals, reflections, audit_logs, working_memory_snapshots");
