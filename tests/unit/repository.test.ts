@@ -177,6 +177,147 @@ describe("Repository persistence", () => {
       expect(goals).toHaveLength(1);
       expect(goals[0].description).toBe("Be helpful");
     });
+
+    it("inserts a classified goal with type and defaults", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      const goal = repo.insert({
+        id: "g-core-1", description: "Safety", type: "core",
+        priority: 1.0, status: "active", mutable: false,
+        requiresApproval: false, approvedAt: null,
+        sourceEpisodeId: null, evidence: null, rationale: "Core safety goal",
+        conflictOf: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      expect(goal.type).toBe("core");
+      expect(goal.mutable).toBe(false);
+      expect(goal.requiresApproval).toBe(false);
+      expect(goal.conflictOf).toBeNull();
+    });
+
+    it("backfills defaults for existing-style insert", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      const goal = repo.insert({
+        id: "g-1", description: "Learn TypeScript",
+        priority: 0.5, status: "active",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      expect(goal.type).toBe("long_term");
+      expect(goal.mutable).toBe(true);
+      expect(goal.requiresApproval).toBe(false);
+    });
+
+    it("finds goals by type", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      repo.insert({
+        id: "g-1", description: "Safety", type: "core",
+        priority: 1.0, status: "active",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+      repo.insert({
+        id: "g-2", description: "Learn", type: "long_term",
+        priority: 0.7, status: "active",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const core = repo.findByType("core");
+      expect(core).toHaveLength(1);
+      expect(core[0].id).toBe("g-1");
+    });
+
+    it("finds goals by status", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      repo.insert({
+        id: "g-1", description: "Suggested", type: "medium_term",
+        priority: 0.6, status: "suggested",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+      repo.insert({
+        id: "g-2", description: "Active", type: "short_term",
+        priority: 0.7, status: "active",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const suggested = repo.findByStatus("suggested");
+      expect(suggested).toHaveLength(1);
+      expect(suggested[0].id).toBe("g-1");
+    });
+
+    it("finds active ranked goals excluding conflicted ones", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      repo.insert({
+        id: "g-1", description: "High priority", type: "short_term",
+        priority: 0.9, status: "active", conflictOf: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+      repo.insert({
+        id: "g-2", description: "Conflicted", type: "short_term",
+        priority: 0.8, status: "active", conflictOf: "g-1",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+      repo.insert({
+        id: "g-3", description: "Low priority", type: "operational",
+        priority: 0.3, status: "active", conflictOf: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const ranked = repo.findActiveRanked();
+      expect(ranked).toHaveLength(2);
+      expect(ranked[0].id).toBe("g-1");
+      expect(ranked[1].id).toBe("g-3");
+    });
+
+    it("updates goal status", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      repo.insert({
+        id: "g-1", description: "Goal", type: "short_term",
+        priority: 0.5, status: "suggested",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const updated = repo.updateStatus("g-1", "active");
+      expect(updated.status).toBe("active");
+    });
+
+    it("updates goal priority", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      repo.insert({
+        id: "g-1", description: "Goal", type: "short_term",
+        priority: 0.5, status: "active",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const updated = repo.updatePriority("g-1", 0.9);
+      expect(updated.priority).toBe(0.9);
+    });
+
+    it("updates conflict metadata", () => {
+      db = createTestDb();
+      const repo = createGoalsRepository(db);
+
+      repo.insert({
+        id: "g-1", description: "Goal", type: "short_term",
+        priority: 0.5, status: "active", conflictOf: null,
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const updated = repo.updateConflictOf("g-1", "g-2");
+      expect(updated.conflictOf).toBe("g-2");
+    });
   });
 
   describe("AuditLogRepository", () => {

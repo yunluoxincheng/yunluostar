@@ -60,6 +60,10 @@ The interactive shell SHALL support slash commands for common local agent contro
 - **WHEN** a user enters `/self`, `/goals`, or `/reflections`
 - **THEN** the shell displays the requested state without modifying persistent state
 
+#### Scenario: Goal inspection command shows goal hierarchy
+- **WHEN** a user enters `/goals`
+- **THEN** the shell displays active and suggested goals with hierarchy, status, priority, approval requirement, and conflict state without modifying persistent state
+
 ### Requirement: Existing CLI subcommands remain available
 The system SHALL preserve existing non-interactive subcommands while adding the default interactive shell.
 

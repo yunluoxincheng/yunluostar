@@ -8,6 +8,7 @@ import { createSelfModelRepository } from "../db/self-model-repository.js";
 import { createReflectionsRepository } from "../db/reflections-repository.js";
 import { createAuditLogRepository } from "../db/audit-log-repository.js";
 import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
+import { createGoalsRepository } from "../db/goals-repository.js";
 import type { EmbeddingClient } from "../llm/embedding-client.js";
 import { createEmbeddingStore } from "../memory/embedding-store.js";
 import { createCompositeScorer } from "../memory/composite-scorer.js";
@@ -17,6 +18,8 @@ import { buildCognitiveContext } from "../memory/context-builder.js";
 import { reflectAndPersist } from "../metacognition/reflector.js";
 import { consolidate } from "../memory/memory-consolidator.js";
 import { applyCorrection } from "../memory/correction-handler.js";
+import { createGoalManager } from "../planning/goal-manager.js";
+import { detectAndPersistConflicts } from "../planning/conflict-detector.js";
 import { createDefaultTrace, generateId } from "../models/defaults.js";
 import type { ChatTrace } from "../models/schemas.js";
 import {
@@ -56,6 +59,9 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
   const reflectionsRepo = createReflectionsRepository(db);
   const auditRepo = createAuditLogRepository(db);
   const wmRepo = createWorkingMemoryRepository(db);
+  const goalsRepo = createGoalsRepository(db);
+
+  const goalManager = createGoalManager(goalsRepo, auditRepo);
 
   const embeddingStore = embeddingClient
     ? createEmbeddingStore(getRawSqlite(db))
@@ -83,6 +89,14 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
         scorer ?? { score: () => [] },
       );
 
+      // Select current goal and inject into working memory BEFORE building context
+      const currentGoal = goalManager.selectCurrentGoal();
+      if (currentGoal) {
+        wm = mergeWorkingMemoryUpdate(wm, {
+          currentGoal: currentGoal.description,
+        });
+      }
+
       const cognitiveContext = buildCognitiveContext(awakened, wm);
 
       onStage?.("thinking");
@@ -97,6 +111,7 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
 
       const trace = createDefaultTrace(episodeId);
       if (latestSnapshot) trace.restoredSnapshotId = latestSnapshot.id;
+      if (currentGoal) trace.selectedGoalId = currentGoal.id;
       trace.recalledMemoryIds = awakened.recalledMemories.map((m) => m.id);
       trace.appliedUserModelIds = awakened.userModelEntries.map((e) => e.id);
       trace.appliedSelfModelIds = awakened.selfModelEntries.map((e) => e.id);
@@ -128,6 +143,34 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
         extraction,
         reflectionOutput,
       }, embeddingClient, embeddingStore);
+
+      // Create suggested goals from consolidation evidence
+      const suggestedGoalIds: string[] = [];
+      if (consolidationResult.selfModelIds.length > 0 || consolidationResult.userModelIds.length > 0) {
+        // Create a durable suggested goal requiring approval
+        const durableResult = goalManager.suggestGoal({
+          description: extraction.outcome ?? `Interaction goal: ${extraction.intent}`,
+          type: "medium_term",
+          sourceEpisodeId: episodeId,
+          evidence: extraction.lesson ?? undefined,
+          rationale: "Derived from consolidation output",
+        });
+        if (durableResult.created) {
+          suggestedGoalIds.push(durableResult.id);
+        }
+
+        // Also create a local operational goal for the current loop
+        const opsResult = goalManager.suggestGoal({
+          description: `Operational: ${extraction.intent}`,
+          type: "operational",
+          sourceEpisodeId: episodeId,
+          rationale: "Local operational goal for current cognitive loop",
+        });
+        if (opsResult.created) {
+          suggestedGoalIds.push(opsResult.id);
+        }
+      }
+      trace.suggestedGoalIds = suggestedGoalIds;
 
       onStage?.("correcting");
       for (const newId of consolidationResult.userModelIds) {

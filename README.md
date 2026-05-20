@@ -75,6 +75,14 @@ yunluo self
 
 # 查看目标
 yunluo goals
+yunluo goals list
+yunluo goals list --status suggested --json
+
+# 目标审批/操作
+yunluo goals approve <goal-id>
+yunluo goals reject <goal-id>
+yunluo goals pause <goal-id>
+yunluo goals complete <goal-id>
 
 # 进入交互式 shell；进入后可输入 /wm 查看工作记忆
 yunluo
@@ -170,7 +178,7 @@ npm run test:coverage
 
 ## 项目状态
 
-当前已完成 **阶段 1：Cognitive RAG — 结构化长期记忆**，并已落地 **阶段 2：Working Memory — 当前状态维护** 的 MVP 能力。下一步建议进入 **Goal System — 长期目标管理**。
+当前已完成 **阶段 1：Cognitive RAG — 结构化长期记忆**、**阶段 2：Working Memory — 当前状态维护**，以及 **阶段 4：Goal System — 目标管理** 的 MVP 能力。下一步建议进入 **Metacognition — 认知过程检查**。
 
 已实现能力包括：
 
@@ -183,12 +191,24 @@ npm run test:coverage
 - 记忆唤醒（支持 embedding / sqlite-vec 语义检索与复合评分）
 - 工作记忆快照（恢复、注入认知上下文、保存、只读查看）
 - 修正处理（过期记忆降级与替代）
+- **目标系统（Goal System）**：
+  - 不可变核心目标（安全、诚实、可控性、用户对齐）自动初始化
+  - 分层目标类型（core / long_term / medium_term / short_term / operational）
+  - 建议目标从交互中推导，需用户审批才能激活
+  - 操作级目标自动激活，无需审批
+  - 目标优先级排序和当前目标选择
+  - 重复检测（相同描述的目标不重复创建）
+  - 冲突检测（与核心目标冲突、可变目标间矛盾检测）
+  - CLI 目标管理命令（list / approve / reject / pause / complete）
+  - 交互式 `/goals` 只读查看目标层级
+  - 所有目标状态变更写入审计日志
+  - 当前目标自动注入 Working Memory
 - 审计日志追踪所有状态变更
 - 只读检查命令（memory、wm、self、goals、reflections）
 
 尚未完成的核心能力：
 
-- 目标系统：目标分层、优先级、建议目标、审批与冲突检测
+- 认知过程检查（Metacognition）：认知过程的监控和调整
 - 规划与行动系统：多步骤计划、执行日志、失败恢复
 - 世界模型：行动后果预测与风险推演
 - 持续运行闭环：长期定期反思、目标维护和跨天连续性

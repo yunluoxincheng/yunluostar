@@ -57,11 +57,25 @@ export const selfModel = sqliteTable("self_model", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
 
+export const GOAL_TYPES = ["core", "long_term", "medium_term", "short_term", "operational"] as const;
+export type GoalType = (typeof GOAL_TYPES)[number];
+
+export const GOAL_STATUSES = ["suggested", "active", "paused", "completed", "rejected", "deprecated"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
+
 export const goals = sqliteTable("goals", {
   id: text("id").primaryKey(),
   description: text("description").notNull(),
+  type: text("type", { enum: [...GOAL_TYPES] }).notNull().default("long_term"),
+  status: text("status", { enum: [...GOAL_STATUSES] }).notNull().default("active"),
   priority: real("priority").notNull().default(0.5),
-  status: text("status", { enum: ["active", "completed", "paused", "deprecated"] }).notNull().default("active"),
+  mutable: integer("mutable", { mode: "boolean" }).notNull().default(true),
+  requiresApproval: integer("requires_approval", { mode: "boolean" }).notNull().default(false),
+  approvedAt: integer("approved_at", { mode: "timestamp" }),
+  sourceEpisodeId: text("source_episode_id").references(() => episodes.id),
+  evidence: text("evidence"),
+  rationale: text("rationale"),
+  conflictOf: text("conflict_of"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
@@ -80,7 +94,7 @@ export const auditLogs = sqliteTable("audit_logs", {
   id: text("id").primaryKey(),
   targetTable: text("target_table").notNull(),
   targetId: text("target_id").notNull(),
-  action: text("action", { enum: ["create", "update", "deprecate", "supersede", "confidence_lower"] }).notNull(),
+  action: text("action", { enum: ["create", "update", "deprecate", "supersede", "confidence_lower", "approve", "reject", "pause", "complete", "conflict"] }).notNull(),
   beforeValue: text("before_value"),
   afterValue: text("after_value"),
   reason: text("reason"),

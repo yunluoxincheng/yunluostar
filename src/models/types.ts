@@ -58,8 +58,16 @@ export interface SelfModelEntry {
 export interface Goal {
   id: string;
   description: string;
+  type: "core" | "long_term" | "medium_term" | "short_term" | "operational";
   priority: number;
-  status: "active" | "completed" | "paused" | "deprecated";
+  status: "suggested" | "active" | "paused" | "completed" | "rejected" | "deprecated";
+  mutable: boolean;
+  requiresApproval: boolean;
+  approvedAt: Date | null;
+  sourceEpisodeId: string | null;
+  evidence: string | null;
+  rationale: string | null;
+  conflictOf: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,7 +86,7 @@ export interface AuditLogEntry {
   id: string;
   targetTable: string;
   targetId: string;
-  action: "create" | "update" | "deprecate" | "supersede" | "confidence_lower";
+  action: "create" | "update" | "deprecate" | "supersede" | "confidence_lower" | "approve" | "reject" | "pause" | "complete" | "conflict";
   beforeValue: string | null;
   afterValue: string | null;
   reason: string | null;

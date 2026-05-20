@@ -159,6 +159,8 @@ export function formatTrace(trace: {
   appliedSelfModelIds: string[];
   restoredSnapshotId?: string;
   savedSnapshotId?: string;
+  selectedGoalId?: string;
+  suggestedGoalIds?: string[];
 }): string {
   const parts: string[] = [];
   if (trace.recalledMemoryIds.length > 0) {
@@ -172,6 +174,12 @@ export function formatTrace(trace: {
   }
   if (trace.restoredSnapshotId || trace.savedSnapshotId) {
     parts.push(theme.world("wm"));
+  }
+  if (trace.selectedGoalId) {
+    parts.push(theme.goal(`goal ${trace.selectedGoalId.slice(0, 8)}`));
+  }
+  if (trace.suggestedGoalIds && trace.suggestedGoalIds.length > 0) {
+    parts.push(theme.goal(`+${trace.suggestedGoalIds.length} suggested`));
   }
   const episode = theme.quiet(`ep ${trace.episodeId.slice(0, 8)}`);
   const reflection = trace.reflectionId

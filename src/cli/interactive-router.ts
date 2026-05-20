@@ -8,6 +8,8 @@ import type { PipelineStage } from "../agent/controller.js";
 import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
 import { createSelfModelRepository } from "../db/self-model-repository.js";
 import { createGoalsRepository } from "../db/goals-repository.js";
+import { createAuditLogRepository } from "../db/audit-log-repository.js";
+import { createGoalManager } from "../planning/goal-manager.js";
 import { createReflectionsRepository } from "../db/reflections-repository.js";
 import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
 import { deserializeWorkingMemory } from "../models/working-memory.js";
@@ -128,9 +130,49 @@ export class InteractiveRouter {
     try {
       runMigrations(db);
       const repo = createGoalsRepository(db);
-      const items = repo.findActive();
-      if (items.length === 0) return chalk.dim("  (no active goals)");
-      return items.map((g) => `  ${chalk.bold(`[${g.status}]`)}  ${g.description}`).join("\n");
+      const auditRepo = createAuditLogRepository(db);
+      const goalManager = createGoalManager(repo, auditRepo);
+
+      // Ensure core goals are initialized
+      goalManager.ensureCoreGoals();
+
+      const items = repo.findAll();
+      if (items.length === 0) return chalk.dim("  (no goals)");
+
+      const TYPE_ORDER: Record<string, number> = {
+        core: 0, long_term: 1, medium_term: 2, short_term: 3, operational: 4,
+      };
+      items.sort((a, b) => {
+        const typeDiff = (TYPE_ORDER[a.type] ?? 99) - (TYPE_ORDER[b.type] ?? 99);
+        if (typeDiff !== 0) return typeDiff;
+        return b.priority - a.priority;
+      });
+
+      const STATUS_ICONS: Record<string, string> = {
+        active: chalk.green("●"), suggested: chalk.yellow("○"),
+        paused: chalk.gray("◷"), completed: chalk.green("✓"),
+        rejected: chalk.red("✗"), deprecated: chalk.gray("—"),
+      };
+
+      const TYPE_LABELS: Record<string, string> = {
+        core: "CORE", long_term: "LONG", medium_term: "MED",
+        short_term: "SHORT", operational: "OPS",
+      };
+
+      const lines: string[] = [];
+      let currentType = "";
+      for (const g of items) {
+        if (g.type !== currentType) {
+          currentType = g.type;
+          lines.push(`  ${chalk.bold(TYPE_LABELS[g.type] ?? g.type)}:`);
+        }
+        const icon = STATUS_ICONS[g.status] ?? "?";
+        const approval = g.requiresApproval && g.status === "suggested" ? chalk.yellow(" [needs approval]") : "";
+        const conflict = g.conflictOf ? chalk.red(` [conflict: ${g.conflictOf.slice(0, 8)}]`) : "";
+        lines.push(`    ${icon} ${g.description} (${chalk.dim(`p:${g.priority.toFixed(1)}`)}${approval}${conflict})`);
+      }
+
+      return lines.join("\n");
     } finally {
       closeDbConnection(db);
     }

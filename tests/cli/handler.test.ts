@@ -63,7 +63,7 @@ describe("CLI handler tests", () => {
     expect(items).toEqual([]);
   });
 
-  it("goals list returns empty list initially", () => {
+  it("goals list returns empty list initially (no core goals initialized yet)", () => {
     db = createTestDb();
     const repo = createGoalsRepository(db);
     const items = repo.findActive();

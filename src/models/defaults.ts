@@ -14,6 +14,8 @@ export function createDefaultTrace(episodeId: string): ChatTrace {
     appliedSelfModelIds: [],
     restoredSnapshotId: undefined,
     savedSnapshotId: undefined,
+    selectedGoalId: undefined,
+    suggestedGoalIds: [],
   };
 }
 
