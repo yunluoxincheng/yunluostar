@@ -112,7 +112,14 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
       trace.reflectionId = reflectionId;
 
       if (reflectionOutput.workingMemoryUpdate) {
-        wm = mergeWorkingMemoryUpdate(wm, reflectionOutput.workingMemoryUpdate);
+        const u = reflectionOutput.workingMemoryUpdate;
+        wm = mergeWorkingMemoryUpdate(wm, {
+          currentGoal: u.current_goal,
+          currentContext: u.current_context,
+          activeHypotheses: u.active_hypotheses,
+          openQuestions: u.open_questions,
+          riskFlags: u.risk_flags,
+        });
       }
 
       onStage?.("consolidating");
