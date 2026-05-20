@@ -7,11 +7,20 @@ export interface EpisodeExtraction {
   confidence: number;
 }
 
+export interface WorkingMemoryUpdateOutput {
+  current_goal?: string | null;
+  current_context?: string;
+  active_hypotheses?: string[];
+  open_questions?: string[];
+  risk_flags?: string[];
+}
+
 export interface ReflectionOutput {
   whatWorked: string;
   whatFailed: string;
   lessons: string;
   updateCandidates: string;
+  workingMemoryUpdate?: WorkingMemoryUpdateOutput;
 }
 
 export interface ConsolidationOutput {

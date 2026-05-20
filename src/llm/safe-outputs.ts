@@ -28,11 +28,23 @@ export function safeExtraction(raw: Partial<EpisodeExtraction> | null | undefine
 }
 
 export function safeReflection(raw: Partial<ReflectionOutput> | null | undefined): ReflectionOutput {
+  const update = raw?.workingMemoryUpdate;
+  const hasValidUpdate = update != null && typeof update === "object" && !Array.isArray(update);
+
   return {
     whatWorked: asString(raw?.whatWorked, "Response generated"),
     whatFailed: asString(raw?.whatFailed, "None identified"),
     lessons: asString(raw?.lessons, FALLBACK_LESSON),
     updateCandidates: asString(raw?.updateCandidates, "[]"),
+    workingMemoryUpdate: hasValidUpdate
+      ? {
+          current_goal: typeof update.current_goal === "string" ? update.current_goal : update.current_goal === null ? null : undefined,
+          current_context: typeof update.current_context === "string" ? update.current_context : undefined,
+          active_hypotheses: Array.isArray(update.active_hypotheses) ? update.active_hypotheses : undefined,
+          open_questions: Array.isArray(update.open_questions) ? update.open_questions : undefined,
+          risk_flags: Array.isArray(update.risk_flags) ? update.risk_flags : undefined,
+        }
+      : undefined,
   };
 }
 

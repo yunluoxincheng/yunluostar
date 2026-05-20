@@ -76,7 +76,9 @@ export class OpenAICompatibleLLMClient implements LLMClient {
         role: "system",
         content:
           "Reflect on this interaction. " +
-          'Respond with valid JSON only: {"whatWorked":"...","whatFailed":"...","lessons":"...","updateCandidates":"..."}',
+          'Respond with valid JSON only: {"whatWorked":"...","whatFailed":"...","lessons":"...","updateCandidates":"...","workingMemoryUpdate":{"current_goal":"...","current_context":"...","active_hypotheses":["..."],"open_questions":["..."],"risk_flags":["..."]}}. ' +
+          "workingMemoryUpdate is optional — only include it if the interaction reveals new goals, context shifts, hypotheses, questions, or risks. " +
+          "Omit fields inside workingMemoryUpdate that should remain unchanged.",
       },
       {
         role: "user",
