@@ -86,3 +86,11 @@ export const auditLogs = sqliteTable("audit_logs", {
   reason: text("reason"),
   timestamp: integer("timestamp", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
+
+export const workingMemorySnapshots = sqliteTable("working_memory_snapshots", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  snapshot: text("snapshot").notNull(),
+  episodeId: text("episode_id"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+});

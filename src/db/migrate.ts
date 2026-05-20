@@ -90,6 +90,14 @@ const CREATE_STATEMENTS = [
     reason TEXT,
     timestamp INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
+
+  `CREATE TABLE IF NOT EXISTS working_memory_snapshots (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    snapshot TEXT NOT NULL,
+    episode_id TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
 ];
 
 export function runMigrations(db: DbClient): void {
