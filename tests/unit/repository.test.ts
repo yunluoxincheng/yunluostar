@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { createTestDb } from "../helpers/test-helpers.js";
+import { generateId } from "../../src/models/defaults.js";
 import { createEpisodesRepository } from "../../src/db/episodes-repository.js";
 import { createSemanticMemoriesRepository } from "../../src/db/semantic-memories-repository.js";
 import { createUserModelRepository } from "../../src/db/user-model-repository.js";
@@ -7,6 +8,7 @@ import { createSelfModelRepository } from "../../src/db/self-model-repository.js
 import { createGoalsRepository } from "../../src/db/goals-repository.js";
 import { createReflectionsRepository } from "../../src/db/reflections-repository.js";
 import { createAuditLogRepository } from "../../src/db/audit-log-repository.js";
+import { createWorkingMemoryRepository } from "../../src/db/working-memory-repository.js";
 
 describe("Repository persistence", () => {
   let db: ReturnType<typeof createTestDb>;
@@ -193,5 +195,58 @@ describe("Repository persistence", () => {
       expect(logs).toHaveLength(1);
       expect(logs[0].action).toBe("create");
     });
+  });
+});
+
+describe("WorkingMemoryRepository", () => {
+  let db: ReturnType<typeof createTestDb>;
+  let repo: ReturnType<typeof createWorkingMemoryRepository>;
+
+  beforeEach(() => {
+    db = createTestDb();
+    repo = createWorkingMemoryRepository(db);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it("saves and retrieves latest snapshot by session", () => {
+    repo.save({
+      id: generateId(),
+      sessionId: "s1",
+      snapshot: '{"current_goal":"first"}',
+      episodeId: "ep1",
+      createdAt: new Date(),
+    });
+
+    const latest = repo.findLatestBySession("s1");
+    expect(latest).not.toBeNull();
+    expect(latest!.snapshot).toBe('{"current_goal":"first"}');
+    expect(latest!.sessionId).toBe("s1");
+  });
+
+  it("returns null when no snapshot exists for session", () => {
+    expect(repo.findLatestBySession("nonexistent")).toBeNull();
+  });
+
+  it("returns the most recent snapshot for a session", () => {
+    repo.save({
+      id: generateId(),
+      sessionId: "s1",
+      snapshot: '{"current_goal":"first"}',
+      episodeId: "ep1",
+      createdAt: new Date(1000),
+    });
+    repo.save({
+      id: generateId(),
+      sessionId: "s1",
+      snapshot: '{"current_goal":"second"}',
+      episodeId: "ep2",
+      createdAt: new Date(2000),
+    });
+
+    const latest = repo.findLatestBySession("s1");
+    expect(latest!.snapshot).toBe('{"current_goal":"second"}');
   });
 });
