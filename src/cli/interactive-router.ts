@@ -2,7 +2,7 @@ import type { AppConfig } from "../config.js";
 import { loadConfig, redactConfig, getResolvedApiKey } from "../config.js";
 import { createDbConnection, closeDbConnection } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { createLLMClient } from "../llm/factory.js";
+import { createLLMClient, createEmbeddingClientFromConfig } from "../llm/factory.js";
 import { createAgentController } from "../agent/controller.js";
 import type { PipelineStage } from "../agent/controller.js";
 import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
@@ -213,7 +213,8 @@ async function processChat(
   try {
     runMigrations(db);
     const llm = createLLMClient(config.provider, config);
-    const agent = createAgentController(llm, db);
+    const embeddingClient = createEmbeddingClientFromConfig(config.provider, config);
+    const agent = createAgentController(llm, db, embeddingClient);
 
     let firstToken = true;
 

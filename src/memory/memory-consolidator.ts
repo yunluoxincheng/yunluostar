@@ -3,6 +3,8 @@ import type { SemanticMemoriesRepository } from "../db/semantic-memories-reposit
 import type { UserModelRepository } from "../db/user-model-repository.js";
 import type { SelfModelRepository } from "../db/self-model-repository.js";
 import type { AuditLogRepository } from "../db/audit-log-repository.js";
+import type { EmbeddingClient } from "../llm/embedding-client.js";
+import type { EmbeddingStore } from "./embedding-store.js";
 import { generateId } from "../models/defaults.js";
 import { safeConsolidation } from "../llm/factory.js";
 
@@ -25,6 +27,8 @@ export async function consolidate(
   selfModelRepo: SelfModelRepository,
   auditRepo: AuditLogRepository,
   input: ConsolidateInput,
+  embeddingClient?: EmbeddingClient,
+  embeddingStore?: EmbeddingStore,
 ): Promise<ConsolidateResult> {
   const rawConsolidation = await llm.consolidate(input.extraction, input.reflectionOutput);
   const consolidation = safeConsolidation(rawConsolidation);
@@ -113,6 +117,35 @@ export async function consolidate(
       timestamp: new Date(),
     });
     selfModelIds.push(id);
+  }
+
+  if (embeddingClient && embeddingStore) {
+    const embeddingItems: Array<{ id: string; text: string }> = [
+      ...consolidation.semanticMemories.map((mem, i) => ({
+        id: semanticMemoryIds[i],
+        text: mem.content,
+      })),
+      ...consolidation.userModelUpdates.map((upd, i) => ({
+        id: userModelIds[i],
+        text: `${upd.key}: ${upd.value}`,
+      })),
+      ...consolidation.selfModelUpdates.map((upd, i) => ({
+        id: selfModelIds[i],
+        text: `${upd.trait}: ${upd.value}`,
+      })),
+    ];
+
+    if (embeddingItems.length > 0) {
+      try {
+        const texts = embeddingItems.map((item) => item.text);
+        const embeddings = await embeddingClient.embedBatch(texts);
+        embeddingStore.upsertBatch(
+          embeddingItems.map((item, i) => ({ id: item.id, embedding: embeddings[i] }))
+        );
+      } catch (err) {
+        console.warn("Embedding generation failed, skipping:", (err as Error).message);
+      }
+    }
   }
 
   return { semanticMemoryIds, userModelIds, selfModelIds };

@@ -11,6 +11,8 @@ export const configSchema = z.object({
   model: z.string().optional(),
   temperature: z.number().min(0).max(2).optional(),
   timeout: z.number().int().positive().optional(),
+  embeddingModel: z.string().default("text-embedding-3-small"),
+  embeddingDimensions: z.number().int().default(1536),
   defaultSessionId: z.string().default("default"),
   databasePath: z.string().default("data/yunluostar.db"),
 });

@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { DbClient } from "./connection.js";
+import { getRawSqlite } from "./connection.js";
+import { DEFAULT_EMBEDDING_DIMENSIONS } from "../memory/embedding-store.js";
 
 const CREATE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS episodes (
@@ -94,4 +96,8 @@ export function runMigrations(db: DbClient): void {
   for (const stmt of CREATE_STATEMENTS) {
     db.run(sql.raw(stmt));
   }
+  const sqlite = getRawSqlite(db);
+  sqlite.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(id TEXT PRIMARY KEY, embedding FLOAT[${DEFAULT_EMBEDDING_DIMENSIONS}])`
+  );
 }

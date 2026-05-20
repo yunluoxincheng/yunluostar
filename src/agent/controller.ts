@@ -1,12 +1,15 @@
 import type { LLMClient } from "../llm/client.js";
 import type { DbClient } from "../db/connection.js";
+import { getRawSqlite } from "../db/connection.js";
 import { createEpisodesRepository } from "../db/episodes-repository.js";
 import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
 import { createUserModelRepository } from "../db/user-model-repository.js";
 import { createSelfModelRepository } from "../db/self-model-repository.js";
 import { createReflectionsRepository } from "../db/reflections-repository.js";
 import { createAuditLogRepository } from "../db/audit-log-repository.js";
-import { createLexicalScorer } from "../memory/relevance-scorer.js";
+import type { EmbeddingClient } from "../llm/embedding-client.js";
+import { createEmbeddingStore } from "../memory/embedding-store.js";
+import { createCompositeScorer } from "../memory/composite-scorer.js";
 import { recordEpisode } from "../memory/episodic/episode-recorder.js";
 import { awakenMemories } from "../memory/memory-awakener.js";
 import { buildCognitiveContext } from "../memory/context-builder.js";
@@ -36,14 +39,20 @@ export interface AgentResult {
   trace: ChatTrace;
 }
 
-export function createAgentController(llm: LLMClient, db: DbClient) {
+export function createAgentController(llm: LLMClient, db: DbClient, embeddingClient?: EmbeddingClient) {
   const episodesRepo = createEpisodesRepository(db);
   const semanticMemoriesRepo = createSemanticMemoriesRepository(db);
   const userModelRepo = createUserModelRepository(db);
   const selfModelRepo = createSelfModelRepository(db);
   const reflectionsRepo = createReflectionsRepository(db);
   const auditRepo = createAuditLogRepository(db);
-  const scorer = createLexicalScorer();
+
+  const embeddingStore = embeddingClient
+    ? createEmbeddingStore(getRawSqlite(db))
+    : undefined;
+  const scorer = embeddingClient && embeddingStore
+    ? createCompositeScorer(embeddingClient, embeddingStore)
+    : undefined;
 
   return {
     async chat(userInput: string, config: AgentConfig): Promise<AgentResult> {
@@ -55,7 +64,7 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
         semanticMemoriesRepo,
         userModelRepo,
         selfModelRepo,
-        scorer,
+        scorer ?? { score: () => [] },
       );
 
       const cognitiveContext = buildCognitiveContext(awakened);
@@ -90,7 +99,7 @@ export function createAgentController(llm: LLMClient, db: DbClient) {
         episodeId,
         extraction,
         reflectionOutput,
-      });
+      }, embeddingClient, embeddingStore);
 
       onStage?.("correcting");
       for (const newId of consolidationResult.userModelIds) {
