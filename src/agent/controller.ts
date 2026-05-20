@@ -7,6 +7,7 @@ import { createUserModelRepository } from "../db/user-model-repository.js";
 import { createSelfModelRepository } from "../db/self-model-repository.js";
 import { createReflectionsRepository } from "../db/reflections-repository.js";
 import { createAuditLogRepository } from "../db/audit-log-repository.js";
+import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
 import type { EmbeddingClient } from "../llm/embedding-client.js";
 import { createEmbeddingStore } from "../memory/embedding-store.js";
 import { createCompositeScorer } from "../memory/composite-scorer.js";
@@ -16,8 +17,14 @@ import { buildCognitiveContext } from "../memory/context-builder.js";
 import { reflectAndPersist } from "../metacognition/reflector.js";
 import { consolidate } from "../memory/memory-consolidator.js";
 import { applyCorrection } from "../memory/correction-handler.js";
-import { createDefaultTrace } from "../models/defaults.js";
+import { createDefaultTrace, generateId } from "../models/defaults.js";
 import type { ChatTrace } from "../models/schemas.js";
+import {
+  createDefaultWorkingMemory,
+  mergeWorkingMemoryUpdate,
+  serializeWorkingMemory,
+  deserializeWorkingMemory,
+} from "../models/working-memory.js";
 
 export interface AgentConfig {
   sessionId: string;
@@ -26,12 +33,14 @@ export interface AgentConfig {
 }
 
 export type PipelineStage =
+  | "restoring"
   | "awakening"
   | "thinking"
   | "recording"
   | "reflecting"
   | "consolidating"
   | "correcting"
+  | "saving"
   | "done";
 
 export interface AgentResult {
@@ -46,6 +55,7 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
   const selfModelRepo = createSelfModelRepository(db);
   const reflectionsRepo = createReflectionsRepository(db);
   const auditRepo = createAuditLogRepository(db);
+  const wmRepo = createWorkingMemoryRepository(db);
 
   const embeddingStore = embeddingClient
     ? createEmbeddingStore(getRawSqlite(db))
@@ -58,6 +68,12 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
     async chat(userInput: string, config: AgentConfig): Promise<AgentResult> {
       const { onStage } = config;
 
+      onStage?.("restoring");
+      const latestSnapshot = wmRepo.findLatestBySession(config.sessionId);
+      let wm = latestSnapshot
+        ? deserializeWorkingMemory(latestSnapshot.snapshot)
+        : createDefaultWorkingMemory();
+
       onStage?.("awakening");
       const awakened = await awakenMemories(
         userInput,
@@ -67,7 +83,7 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
         scorer ?? { score: () => [] },
       );
 
-      const cognitiveContext = buildCognitiveContext(awakened);
+      const cognitiveContext = buildCognitiveContext(awakened, wm);
 
       onStage?.("thinking");
       const response = await llm.generateResponse(cognitiveContext, userInput, config.onToken);
@@ -80,6 +96,7 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
       });
 
       const trace = createDefaultTrace(episodeId);
+      if (latestSnapshot) trace.restoredSnapshotId = latestSnapshot.id;
       trace.recalledMemoryIds = awakened.recalledMemories.map((m) => m.id);
       trace.appliedUserModelIds = awakened.userModelEntries.map((e) => e.id);
       trace.appliedSelfModelIds = awakened.selfModelEntries.map((e) => e.id);
@@ -93,6 +110,10 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
         extraction,
       });
       trace.reflectionId = reflectionId;
+
+      if (reflectionOutput.workingMemoryUpdate) {
+        wm = mergeWorkingMemoryUpdate(wm, reflectionOutput.workingMemoryUpdate);
+      }
 
       onStage?.("consolidating");
       const consolidationResult = await consolidate(llm, semanticMemoriesRepo, userModelRepo, selfModelRepo, auditRepo, {
@@ -127,6 +148,17 @@ export function createAgentController(llm: LLMClient, db: DbClient, embeddingCli
           );
         }
       }
+
+      onStage?.("saving");
+      const snapshotId = generateId();
+      wmRepo.save({
+        id: snapshotId,
+        sessionId: config.sessionId,
+        snapshot: serializeWorkingMemory(wm),
+        episodeId,
+        createdAt: new Date(),
+      });
+      trace.savedSnapshotId = snapshotId;
 
       onStage?.("done");
       return { response, trace };

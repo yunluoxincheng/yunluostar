@@ -157,6 +157,8 @@ export function formatTrace(trace: {
   recalledMemoryIds: string[];
   appliedUserModelIds: string[];
   appliedSelfModelIds: string[];
+  restoredSnapshotId?: string;
+  savedSnapshotId?: string;
 }): string {
   const parts: string[] = [];
   if (trace.recalledMemoryIds.length > 0) {
@@ -167,6 +169,9 @@ export function formatTrace(trace: {
   }
   if (trace.appliedSelfModelIds.length > 0) {
     parts.push(theme.self(`self ${trace.appliedSelfModelIds.length}`));
+  }
+  if (trace.restoredSnapshotId || trace.savedSnapshotId) {
+    parts.push(theme.world("wm"));
   }
   const episode = theme.quiet(`ep ${trace.episodeId.slice(0, 8)}`);
   const reflection = trace.reflectionId
@@ -189,6 +194,7 @@ export function formatHelp(): string {
     [theme.self("/self"),            "active self model"],
     [theme.goal("/goals"),           "active goals"],
     [theme.world("/reflections"),    "recent reflections"],
+    [theme.accent("/wm"),            "current working memory"],
   ];
   const lines = [
     `${theme.title("Command Surface")} ${theme.quiet("chat, inspect, steer")}`,
@@ -235,4 +241,39 @@ export function formatConfigInfo(config: Record<string, unknown>): string {
     "",
     ...rows,
   ], Math.min(termWidth(), 72) - 4);
+}
+
+// ─── Working Memory display ──────────────────────────────────
+
+export function formatWorkingMemory(wm: {
+  currentGoal: string | null;
+  currentContext: string;
+  activeHypotheses: readonly string[];
+  openQuestions: readonly string[];
+  riskFlags: readonly string[];
+}): string {
+  const lines: string[] = [`${theme.title("Working Memory")}`, ""];
+
+  if (wm.currentGoal) {
+    lines.push(keyValue("goal", wm.currentGoal, theme.goal));
+  }
+  if (wm.currentContext) {
+    lines.push(keyValue("context", wm.currentContext, white));
+  }
+  if (wm.activeHypotheses.length > 0) {
+    lines.push(`${theme.quiet("hypotheses".padEnd(12))} (${wm.activeHypotheses.length})`);
+    wm.activeHypotheses.forEach((h, i) => lines.push(`  ${bold(String(i + 1))}. ${h}`));
+  }
+  if (wm.openQuestions.length > 0) {
+    lines.push(`${theme.quiet("questions".padEnd(12))} (${wm.openQuestions.length})`);
+    wm.openQuestions.forEach((q, i) => lines.push(`  ${bold(String(i + 1))}. ${q}`));
+  }
+  if (wm.riskFlags.length > 0) {
+    lines.push(`${theme.quiet("risks".padEnd(12))} (${wm.riskFlags.length})`);
+    wm.riskFlags.forEach((r, i) => lines.push(`  ${red(String(i + 1))}. ${r}`));
+  }
+  if (!wm.currentGoal && !wm.currentContext && wm.activeHypotheses.length === 0 && wm.openQuestions.length === 0 && wm.riskFlags.length === 0) {
+    lines.push(dim("  (empty)"));
+  }
+  return "\n" + frame(lines, Math.min(termWidth(), 64) - 4) + "\n";
 }

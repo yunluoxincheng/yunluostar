@@ -11,6 +11,8 @@ export const chatTraceSchema = z.object({
   recalledMemoryIds: z.array(z.string()).default([]),
   appliedUserModelIds: z.array(z.string()).default([]),
   appliedSelfModelIds: z.array(z.string()).default([]),
+  restoredSnapshotId: z.string().optional(),
+  savedSnapshotId: z.string().optional(),
 });
 
 export const chatResultSchema = z.object({

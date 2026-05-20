@@ -9,11 +9,13 @@ import { createSemanticMemoriesRepository } from "../db/semantic-memories-reposi
 import { createSelfModelRepository } from "../db/self-model-repository.js";
 import { createGoalsRepository } from "../db/goals-repository.js";
 import { createReflectionsRepository } from "../db/reflections-repository.js";
+import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
+import { deserializeWorkingMemory } from "../models/working-memory.js";
 import {
   banner, promptStr, responsePrefix, responseContinue,
   formatResponse, footerLine, renderMarkdown,
   createSpinner, formatTrace, formatHelp, formatError,
-  formatModelInfo, formatConfigInfo,
+  formatModelInfo, formatConfigInfo, formatWorkingMemory,
 } from "./tui.js";
 import chalk from "chalk";
 
@@ -23,12 +25,14 @@ export interface InteractiveCommandResult {
 }
 
 const STAGE_LABELS: Record<PipelineStage, string> = {
+  restoring: "restoring working memory...",
   awakening: "awakening relevant memory...",
   thinking: "integrating context...",
   recording: "recording episode...",
   reflecting: "running metacognition...",
   consolidating: "consolidating memory...",
   correcting: "resolving correction...",
+  saving: "saving working memory...",
   done: "",
 };
 
@@ -86,6 +90,8 @@ export class InteractiveRouter {
         return { action: "continue", output: await this.inspectGoals() };
       case "/reflections":
         return { action: "continue", output: await this.inspectReflections() };
+      case "/wm":
+        return { action: "continue", output: await this.inspectWorkingMemory() };
       default:
         return { action: "error", output: `Unknown command: ${command}. Type /help for commands.` };
     }
@@ -138,6 +144,20 @@ export class InteractiveRouter {
       const items = repo.findRecent(10);
       if (items.length === 0) return chalk.dim("  (no reflections)");
       return items.map((r) => `  ${(r.whatWorked ?? "").slice(0, 80)}`).join("\n");
+    } finally {
+      closeDbConnection(db);
+    }
+  }
+
+  private async inspectWorkingMemory(): Promise<string> {
+    const db = createDbConnection(this.config.databasePath);
+    try {
+      runMigrations(db);
+      const repo = createWorkingMemoryRepository(db);
+      const latest = repo.findLatestBySession(this.sessionId);
+      if (!latest) return chalk.dim("  (no working memory snapshot)");
+      const wm = deserializeWorkingMemory(latest.snapshot);
+      return formatWorkingMemory(wm);
     } finally {
       closeDbConnection(db);
     }
