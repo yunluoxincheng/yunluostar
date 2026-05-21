@@ -48,9 +48,11 @@ function YunluoApp({ config, version }: AppProps) {
   const {
     entries,
     agentState,
+    pendingToolApprovals,
     sessionId,
     sendChat,
     processSlashCommand,
+    resolveToolApproval,
     addInspectorEntry,
   } = useInteractiveAgent(config);
 
@@ -61,6 +63,12 @@ function YunluoApp({ config, version }: AppProps) {
 
     if (trimmed === "/exit" || trimmed === "/quit") {
       exit();
+      return;
+    }
+
+    const approvalMatch = trimmed.match(/^\/(approve|deny)\s+(\S+)$/i);
+    if (approvalMatch) {
+      addInspectorEntry(await resolveToolApproval(approvalMatch[2], approvalMatch[1].toLowerCase() === "approve"));
       return;
     }
 
@@ -81,7 +89,7 @@ function YunluoApp({ config, version }: AppProps) {
     }
 
     await sendChat(trimmed);
-  }, [exit, sendChat, processSlashCommand, addInspectorEntry]);
+  }, [exit, sendChat, processSlashCommand, addInspectorEntry, resolveToolApproval]);
 
   useInput((inputChar: string, key: KeyShape) => {
     if (key.ctrl && inputChar === "c") {
@@ -89,7 +97,8 @@ function YunluoApp({ config, version }: AppProps) {
       return;
     }
 
-    if (agentState.processing) return;
+    const inputAllowedForApproval = pendingToolApprovals.length > 0;
+    if (agentState.processing && !inputAllowedForApproval) return;
 
     if (palette.open) {
       if (key.upArrow) { onUp(); return; }
@@ -165,6 +174,7 @@ function YunluoApp({ config, version }: AppProps) {
         provider={config.provider}
         model={modelLabel}
         sessionId={sessionId}
+        runtimeMode={config.runtimeMode}
       />
       <ConversationView entries={entries} />
       <StatusLine stage={agentState.stage} visible={agentState.processing} />
@@ -184,8 +194,8 @@ function YunluoApp({ config, version }: AppProps) {
       <CommandPalette state={palette} />
       <InputBar
         value={input}
-        disabled={agentState.processing}
-        placeholder="type a message or / for commands..."
+        disabled={agentState.processing && pendingToolApprovals.length === 0}
+        placeholder={pendingToolApprovals.length > 0 ? "approve or deny pending tool request..." : "type a message or / for commands..."}
       />
     </Box>
   );

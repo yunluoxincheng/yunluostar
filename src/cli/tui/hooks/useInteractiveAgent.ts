@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef } from "react";
 import type { AppConfig } from "../../../config.js";
-import { createDbConnection, closeDbConnection } from "../../../db/connection.js";
-import { runMigrations } from "../../../db/migrate.js";
-import { createLLMClient, createEmbeddingClient } from "../../../llm/factory.js";
-import { createAgentController } from "../../../agent/controller.js";
-import type { PipelineStage } from "../../../agent/controller.js";
+import { createRuntimeClient } from "../../../runtime-client/client.js";
+import { createChatRequest } from "../../../runtime-client/chat.js";
+import { resolvePermissionDecision } from "../../../runtime-client/permissions.js";
+import { executeLocalToolRequest } from "../../../runtime-client/tool-executor.js";
+import { toolResultSchema, type PipelineStage, type ToolRequest } from "../../../protocol/runtime.js";
 import { InteractiveRouter, STAGE_LABELS } from "../../interactive-router.js";
 import type { ConversationEntry } from "../components/ConversationView.js";
 
@@ -30,9 +30,15 @@ export interface AgentState {
   error: string | null;
 }
 
+export interface PendingToolApproval {
+  runtimeRequestId: string;
+  toolRequest: ToolRequest;
+}
+
 export function useInteractiveAgent(config: AppConfig) {
   const routerRef = useRef(new InteractiveRouter(config));
   const [entries, setEntries] = useState<ConversationEntry[]>([]);
+  const [pendingToolApprovals, setPendingToolApprovals] = useState<PendingToolApproval[]>([]);
   const [agentState, setAgentState] = useState<AgentState>({
     processing: false,
     stage: "",
@@ -60,33 +66,57 @@ export function useInteractiveAgent(config: AppConfig) {
 
     setAgentState((prev: AgentState) => ({ ...prev, processing: true, stage: "starting...", error: null }));
 
-    const db = createDbConnection(config.databasePath);
     try {
-      runMigrations(db);
-      const llm = createLLMClient(config.provider, config);
-      const embeddingClient = createEmbeddingClient();
-      const agent = createAgentController(llm, db, embeddingClient);
+      const client = createRuntimeClient(config);
+      const request = createChatRequest(config, message, sessionId);
 
       let fullResponse = "";
 
       setEntries((prev: ConversationEntry[]) => [...prev, { id: assistantId, role: "assistant", content: "", streaming: true }]);
 
-      const result = await agent.chat(message, {
-        sessionId,
-        onToken: (token: string) => {
-          fullResponse += token;
-          setEntries((prev: ConversationEntry[]) =>
-            prev.map((e: ConversationEntry) =>
-              e.id === assistantId
-                ? { ...e, content: fullResponse }
-                : e,
-            ),
-          );
-        },
-        onStage: (stage: PipelineStage) => {
-          const label = STAGE_LABELS[stage];
-          if (label) {
-            setAgentState((prev: AgentState) => ({ ...prev, stage: label }));
+      const result = await client.chat(request, {
+        onEvent: (event) => {
+          if (event.type === "token") {
+            fullResponse += event.token;
+            setEntries((prev: ConversationEntry[]) =>
+              prev.map((e: ConversationEntry) =>
+                e.id === assistantId
+                  ? { ...e, content: fullResponse }
+                  : e,
+              ),
+            );
+          }
+          if (event.type === "stage") {
+            const label = STAGE_LABELS[event.stage as PipelineStage];
+            if (label) {
+              setAgentState((prev: AgentState) => ({ ...prev, stage: label }));
+            }
+          }
+          if (event.type === "tool_request") {
+            const decision = resolvePermissionDecision(event.toolRequest, config);
+            if (decision === "ask") {
+              setPendingToolApprovals((prev) => [
+                ...prev.filter((item) => item.toolRequest.id !== event.toolRequest.id),
+                { runtimeRequestId: event.requestId, toolRequest: event.toolRequest },
+              ]);
+              setEntries((prev: ConversationEntry[]) => [
+                ...prev,
+                {
+                  id: `tool-${event.toolRequest.id}`,
+                  role: "system",
+                  content: `Tool approval required: ${event.toolRequest.id} ${event.toolRequest.name} ${JSON.stringify(event.toolRequest.params)}. Use /approve ${event.toolRequest.id} or /deny ${event.toolRequest.id}.`,
+                },
+              ]);
+              return;
+            }
+            void executeLocalToolRequest(event.requestId, event.toolRequest, { approved: decision === "allow" })
+              .then((toolResult) => client.sendToolResult(toolResult))
+              .catch((error) => {
+                setEntries((prev: ConversationEntry[]) => [
+                  ...prev,
+                  { id: `tool-error-${Date.now()}`, role: "system", content: `Tool result failed: ${(error as Error).message}` },
+                ]);
+              });
           }
         },
       });
@@ -109,10 +139,28 @@ export function useInteractiveAgent(config: AppConfig) {
       const msg = (err as Error).message;
       setAgentState((prev: AgentState) => ({ ...prev, processing: false, stage: "", error: msg }));
       setEntries((prev: ConversationEntry[]) => prev.filter((e: ConversationEntry) => e.id !== assistantId));
-    } finally {
-      closeDbConnection(db);
     }
   }, [config, sessionId]);
+
+  const resolveToolApproval = useCallback(async (toolRequestId: string, approved: boolean): Promise<string> => {
+    const pending = pendingToolApprovals.find((item) => item.toolRequest.id === toolRequestId);
+    if (!pending) return `No pending tool request: ${toolRequestId}`;
+
+    const client = createRuntimeClient(config);
+    const result = approved
+      ? await executeLocalToolRequest(pending.runtimeRequestId, pending.toolRequest, { approved: true })
+      : toolResultSchema.parse({
+        requestId: pending.runtimeRequestId,
+        toolRequestId: pending.toolRequest.id,
+        status: "denied",
+        error: "Denied by user approval command.",
+      });
+    await client.sendToolResult(result);
+    setPendingToolApprovals((prev) => prev.filter((item) => item.toolRequest.id !== toolRequestId));
+    return approved
+      ? `Tool ${toolRequestId} approved: ${result.status}${result.error ? ` (${result.error})` : ""}`
+      : `Tool ${toolRequestId} denied.`;
+  }, [config, pendingToolApprovals]);
 
   const addInspectorEntry = useCallback((content: string) => {
     setEntries((prev: ConversationEntry[]) => [
@@ -131,9 +179,11 @@ export function useInteractiveAgent(config: AppConfig) {
   return {
     entries,
     agentState,
+    pendingToolApprovals,
     sessionId,
     sendChat,
     processSlashCommand,
+    resolveToolApproval,
     addInspectorEntry,
     addErrorEntry,
     router: routerRef.current,

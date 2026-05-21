@@ -1,48 +1,40 @@
-import { chatInputSchema } from "../models/schemas.js";
 import { loadConfig, type AppConfig } from "../config.js";
-import { createDbConnection, closeDbConnection } from "../db/connection.js";
-import { runMigrations } from "../db/migrate.js";
-import { createLLMClient, createEmbeddingClient } from "../llm/factory.js";
-import { createAgentController } from "../agent/controller.js";
+import { createRuntimeClient } from "../runtime-client/client.js";
+import { createChatRequest } from "../runtime-client/chat.js";
+import type { ChatRequest } from "../protocol/runtime.js";
 
 export async function handleChat(
   options: { session?: string; message?: string; json?: boolean },
   cliOverrides?: Partial<AppConfig>,
 ): Promise<void> {
   const config = loadConfig(cliOverrides);
-  const db = createDbConnection(config.databasePath);
-  try {
-    runMigrations(db);
-
-    const message = options.message;
-    if (!message) {
-      const readline = await import("node:readline");
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      const answer = await new Promise<string>((resolve) => {
-        rl.question("You: ", (input) => {
-          rl.close();
-          resolve(input);
-        });
+  const message = options.message;
+  if (!message) {
+    const readline = await import("node:readline");
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((resolve) => {
+      rl.question("You: ", (input) => {
+        rl.close();
+        resolve(input);
       });
-      return await processChat(answer, options.session ?? config.defaultSessionId, config, db, options.json);
-    }
-
-    await processChat(message, options.session ?? config.defaultSessionId, config, db, options.json);
-  } finally {
-    closeDbConnection(db);
+    });
+    return await processChat(answer, options.session ?? config.defaultSessionId, config, options.json);
   }
+
+  await processChat(message, options.session ?? config.defaultSessionId, config, options.json);
 }
 
 async function processChat(
   message: string,
   sessionId: string,
   config: ReturnType<typeof loadConfig>,
-  db: ReturnType<typeof createDbConnection>,
   jsonOutput?: boolean,
 ): Promise<void> {
-  const parsed = chatInputSchema.safeParse({ message, session: sessionId });
-  if (!parsed.success) {
-    const errorMsg = parsed.error.issues.map((i) => i.message).join(", ");
+  let request: ChatRequest;
+  try {
+    request = createChatRequest(config, message, sessionId);
+  } catch (error) {
+    const errorMsg = (error as Error).message;
     if (jsonOutput) {
       console.log(JSON.stringify({ error: errorMsg }));
     } else {
@@ -51,10 +43,8 @@ async function processChat(
     return;
   }
 
-  const llm = createLLMClient(config.provider, config);
-  const embeddingClient = createEmbeddingClient();
-  const agent = createAgentController(llm, db, embeddingClient);
-  const result = await agent.chat(parsed.data.message, { sessionId: parsed.data.session ?? sessionId });
+  const client = createRuntimeClient(config);
+  const result = await client.chat(request);
 
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));

@@ -5,8 +5,9 @@ export function registerSelfCommand(program: Command): void {
     .command("self")
     .description("Show current self model state")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
+    .action(async (options, cmd) => {
       const { handleSelfShow } = await import("./self-handler.js");
-      await handleSelfShow(options);
+      const { cliOverridesFromOpts } = await import("./index.js");
+      await handleSelfShow(options, cliOverridesFromOpts(cmd.parent?.opts() ?? {}));
     });
 }

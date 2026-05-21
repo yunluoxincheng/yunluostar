@@ -34,7 +34,7 @@ The system SHALL start an Ink-based interactive TUI shell when `yunluo` is run w
 - **THEN** the system renders streaming response text in the conversation area without writing raw token output over the input line
 
 ### Requirement: Interactive slash commands
-The interactive shell SHALL support slash commands for common local agent control and inspection flows.
+The interactive shell SHALL support slash commands for runtime auth, runtime status, permissions, and common agent state inspection flows.
 
 #### Scenario: Help command lists supported commands
 - **WHEN** a user enters `/help`
@@ -67,6 +67,18 @@ The interactive shell SHALL support slash commands for common local agent contro
 #### Scenario: Goal inspection command shows goal hierarchy
 - **WHEN** a user enters `/goals`
 - **THEN** the shell displays active and suggested goals with hierarchy, status, priority, approval requirement, and conflict state without modifying persistent state
+
+#### Scenario: Runtime status command
+- **WHEN** a user enters `/runtime` or `/status`
+- **THEN** the shell displays runtime connection, provider readiness, embedding readiness, storage ownership, and auth state
+
+#### Scenario: Login and logout commands
+- **WHEN** a user enters `/login <token>` or `/logout`
+- **THEN** the shell updates local runtime auth token storage
+
+#### Scenario: Permissions command
+- **WHEN** a user enters `/permissions`
+- **THEN** the shell displays the effective local tool permission policy
 
 ### Requirement: Existing CLI subcommands remain available
 The system SHALL preserve existing non-interactive subcommands while adding the default interactive shell.
@@ -133,11 +145,15 @@ The Ink shell SHALL preview available slash commands when the user begins comman
 - **THEN** the palette closes while preserving the current input buffer
 
 ### Requirement: Ink TUI state surfaces
-The Ink shell SHALL render the active session, model/provider summary, pipeline status, latest trace metadata, conversation history, inspector output, errors, and input area as structured TUI regions.
+The Ink shell SHALL render the active session, model/provider summary, runtime connection/auth state, tool approval prompts, latest trace metadata, conversation history, inspector output, errors, and input area as structured TUI regions.
 
 #### Scenario: Header shows session and model state
 - **WHEN** the interactive shell is open
 - **THEN** the header displays the active session and active provider/model summary
+
+#### Scenario: Header shows runtime state
+- **WHEN** the interactive shell is open
+- **THEN** the header displays runtime mode and auth status alongside session and provider state
 
 #### Scenario: Trace line appears after chat
 - **WHEN** a chat turn completes with trace metadata
@@ -147,3 +163,10 @@ The Ink shell SHALL render the active session, model/provider summary, pipeline 
 - **WHEN** a read-only slash command returns inspection output
 - **THEN** the shell renders that output in an inspector area rather than mixing it into the streaming assistant response
 
+#### Scenario: Tool approval prompt appears
+- **WHEN** a runtime tool request requires user approval
+- **THEN** the TUI displays the requested operation and lets the user approve or deny it with slash commands
+
+#### Scenario: Runtime errors are readable
+- **WHEN** the configured runtime is unavailable or returns a protocol/auth error
+- **THEN** the TUI shows a readable error instead of crashing

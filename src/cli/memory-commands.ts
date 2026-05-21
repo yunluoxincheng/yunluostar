@@ -8,17 +8,19 @@ export function registerMemoryCommands(program: Command): void {
     .description("List recent semantic memories")
     .option("-l, --limit <n>", "Number of entries", "20")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
+    .action(async (options, cmd) => {
       const { handleMemoryList } = await import("./memory-handler.js");
-      await handleMemoryList(options);
+      const { cliOverridesFromOpts } = await import("./index.js");
+      await handleMemoryList(options, cliOverridesFromOpts(cmd.parent?.parent?.opts() ?? {}));
     });
 
   memory
     .command("show <id>")
     .description("Show a specific semantic memory")
     .option("--json", "Output as JSON")
-    .action(async (id, options) => {
+    .action(async (id, options, cmd) => {
       const { handleMemoryShow } = await import("./memory-handler.js");
-      await handleMemoryShow(id, options);
+      const { cliOverridesFromOpts } = await import("./index.js");
+      await handleMemoryShow(id, options, cliOverridesFromOpts(cmd.parent?.parent?.opts() ?? {}));
     });
 }

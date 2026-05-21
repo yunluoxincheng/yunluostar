@@ -1,16 +1,8 @@
 import type { AppConfig } from "../config.js";
 import { loadConfig, redactConfig, getResolvedApiKey } from "../config.js";
-import { createDbConnection, closeDbConnection } from "../db/connection.js";
-import { runMigrations } from "../db/migrate.js";
-import type { PipelineStage } from "../agent/controller.js";
-import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
-import { createSelfModelRepository } from "../db/self-model-repository.js";
-import { createGoalsRepository } from "../db/goals-repository.js";
-import { createAuditLogRepository } from "../db/audit-log-repository.js";
-import { createGoalManager } from "../planning/goal-manager.js";
-import { createReflectionsRepository } from "../db/reflections-repository.js";
-import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
-import { deserializeWorkingMemory } from "../models/working-memory.js";
+import { clearAuthFile, readAuthFile, writeAuthFile } from "../auth/token-store.js";
+import type { PipelineStage } from "../protocol/runtime.js";
+import { createRuntimeClient } from "../runtime-client/client.js";
 import {
   formatHelp,
   formatModelInfo, formatConfigInfo, formatWorkingMemory,
@@ -68,6 +60,15 @@ export class InteractiveRouter {
         return { action: "exit" };
       case "/config":
         return { action: "continue", output: formatConfigInfo(redactConfig(this.config)) };
+      case "/runtime":
+      case "/status":
+        return { action: "continue", output: await this.inspectRuntime() };
+      case "/login":
+        return { action: "continue", output: this.login(args[0]) };
+      case "/logout":
+        return { action: "continue", output: this.logout() };
+      case "/permissions":
+        return { action: "continue", output: formatConfigInfo({ permissionPolicy: this.config.permissionPolicy }) };
       case "/model":
         return { action: "continue", output: formatModelInfo({
           provider: this.config.provider,
@@ -102,44 +103,71 @@ export class InteractiveRouter {
     }
   }
 
-  private async inspectMemory(): Promise<string> {
-    const db = createDbConnection(this.config.databasePath);
+  private login(token?: string): string {
+    if (!token) return "  usage: /login <runtime-token>";
+    const auth = writeAuthFile({ runtimeUrl: this.config.runtimeUrl, token });
+    return `  saved runtime token for ${auth.runtimeUrl}`;
+  }
+
+  private logout(): string {
+    const removed = clearAuthFile();
+    return removed ? "  removed runtime auth token" : "  no runtime auth token found";
+  }
+
+  private async inspectRuntime(): Promise<string> {
+    const client = createRuntimeClient(this.config);
+    const auth = readAuthFile();
     try {
-      runMigrations(db);
-      const repo = createSemanticMemoriesRepository(db);
-      const items = repo.findRecent(20);
+      const status = await client.status();
+      return [
+        `  runtime: ${chalk.bold(this.config.runtimeMode)} ${chalk.dim(this.config.runtimeUrl)}`,
+        `  auth: ${status.authRequired ? (auth ? chalk.green("token saved") : chalk.yellow("login required")) : chalk.dim("not required")}`,
+        `  provider: ${status.provider} ${status.providerReady ? chalk.green("ready") : chalk.yellow("not configured")}`,
+        `  embedding: ${status.embeddingReady ? chalk.green("ready") : chalk.yellow("unavailable")}`,
+        `  storage: ${status.storage.driver} ${status.storage.ownedByRuntime ? chalk.green("runtime-owned") : chalk.red("cli-owned")}`,
+      ].join("\n");
+    } catch (error) {
+      return [
+        `  runtime unavailable: ${(error as Error).message}`,
+        `  configured URL: ${this.config.runtimeUrl}`,
+        "  use /config to check settings or start local runtime with: yunluo runtime serve",
+      ].join("\n");
+    }
+  }
+
+  private async inspectMemory(): Promise<string> {
+    try {
+      const result = await createRuntimeClient(this.config).listMemory();
+      const items = result.items as Array<{ category?: string; content?: string }>;
       if (items.length === 0) return chalk.dim("  (no memories)");
-      return items.map((m) => `  ${chalk.bold(m.category ?? "general")}  ${chalk.dim(m.content.slice(0, 80))}`).join("\n");
-    } finally {
-      closeDbConnection(db);
+      return items.map((m) => `  ${chalk.bold(m.category ?? "general")}  ${chalk.dim((m.content ?? "").slice(0, 80))}`).join("\n");
+    } catch (error) {
+      return `  runtime memory unavailable: ${(error as Error).message}`;
     }
   }
 
   private async inspectSelf(): Promise<string> {
-    const db = createDbConnection(this.config.databasePath);
     try {
-      runMigrations(db);
-      const repo = createSelfModelRepository(db);
-      const items = repo.findActive();
+      const result = await createRuntimeClient(this.config).listSelfModel();
+      const items = result.items as Array<{ trait?: string; value?: string }>;
       if (items.length === 0) return chalk.dim("  (no self model entries)");
       return items.map((e) => `  ${chalk.bold(e.trait)}  ${e.value}`).join("\n");
-    } finally {
-      closeDbConnection(db);
+    } catch (error) {
+      return `  runtime self model unavailable: ${(error as Error).message}`;
     }
   }
 
   private async inspectGoals(): Promise<string> {
-    const db = createDbConnection(this.config.databasePath);
     try {
-      runMigrations(db);
-      const repo = createGoalsRepository(db);
-      const auditRepo = createAuditLogRepository(db);
-      const goalManager = createGoalManager(repo, auditRepo);
-
-      // Ensure core goals are initialized
-      goalManager.ensureCoreGoals();
-
-      const items = repo.findAll();
+      const result = await createRuntimeClient(this.config).listGoals();
+      const items = result.items as Array<{
+        type: string;
+        status: string;
+        priority: number;
+        requiresApproval?: boolean;
+        conflictOf?: string | null;
+        description: string;
+      }>;
       if (items.length === 0) return chalk.dim("  (no goals)");
 
       const TYPE_ORDER: Record<string, number> = {
@@ -176,35 +204,35 @@ export class InteractiveRouter {
       }
 
       return lines.join("\n");
-    } finally {
-      closeDbConnection(db);
+    } catch (error) {
+      return `  runtime goals unavailable: ${(error as Error).message}`;
     }
   }
 
   private async inspectReflections(): Promise<string> {
-    const db = createDbConnection(this.config.databasePath);
     try {
-      runMigrations(db);
-      const repo = createReflectionsRepository(db);
-      const items = repo.findRecent(10);
+      const result = await createRuntimeClient(this.config).listReflections(10);
+      const items = result.items as Array<{ whatWorked?: string | null }>;
       if (items.length === 0) return chalk.dim("  (no reflections)");
       return items.map((r) => `  ${(r.whatWorked ?? "").slice(0, 80)}`).join("\n");
-    } finally {
-      closeDbConnection(db);
+    } catch (error) {
+      return `  runtime reflections unavailable: ${(error as Error).message}`;
     }
   }
 
   private async inspectWorkingMemory(): Promise<string> {
-    const db = createDbConnection(this.config.databasePath);
     try {
-      runMigrations(db);
-      const repo = createWorkingMemoryRepository(db);
-      const latest = repo.findLatestBySession(this.sessionId);
-      if (!latest) return chalk.dim("  (no working memory snapshot)");
-      const wm = deserializeWorkingMemory(latest.snapshot);
-      return formatWorkingMemory(wm);
-    } finally {
-      closeDbConnection(db);
+      const session = await createRuntimeClient(this.config).getSession(this.sessionId);
+      if (!session.workingMemory) return chalk.dim("  (no working memory snapshot)");
+      return formatWorkingMemory(session.workingMemory as {
+        currentGoal: string | null;
+        currentContext: string;
+        activeHypotheses: readonly string[];
+        openQuestions: readonly string[];
+        riskFlags: readonly string[];
+      });
+    } catch (error) {
+      return `  runtime working memory unavailable: ${(error as Error).message}`;
     }
   }
 }

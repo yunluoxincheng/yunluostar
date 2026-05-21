@@ -58,6 +58,12 @@ yunluo
 # 非交互式对话
 yunluo chat --message "Hello" --json
 
+# 启动本地 runtime 服务（HTTP + SSE）
+yunluo runtime serve --host 127.0.0.1 --port 3927
+
+# 让 CLI 指向本地 runtime
+yunluo --runtime-mode local --runtime-url http://127.0.0.1:3927
+
 # 查看配置
 yunluo config show
 
@@ -136,8 +142,8 @@ yunluo :: > /exit
 
 配置通过以下方式管理（按优先级从高到低）：
 
-1. **CLI flags** — `--provider`, `--model`, `--base-url`, `--temperature`, `--timeout`, `--session`, `--db`
-2. **环境变量** — `YUNLUO_PROVIDER`, `YUNLUO_BASE_URL`, `YUNLUO_API_KEY`, `YUNLUO_MODEL`, `YUNLUO_TEMPERATURE`, `YUNLUO_TIMEOUT`, `DATABASE_URL`, `LLM_PROVIDER`
+1. **CLI flags** — `--provider`, `--model`, `--base-url`, `--temperature`, `--timeout`, `--session`, `--db`, `--runtime-mode`, `--runtime-url`
+2. **环境变量** — `YUNLUO_PROVIDER`, `YUNLUO_BASE_URL`, `YUNLUO_API_KEY`, `YUNLUO_MODEL`, `YUNLUO_TEMPERATURE`, `YUNLUO_TIMEOUT`, `YUNLUO_RUNTIME_MODE`, `YUNLUO_RUNTIME_URL`, `DATABASE_URL`, `LLM_PROVIDER`
 3. **项目配置** — `.yunluo/config.json`（项目级别）
 4. **用户配置** — `~/.yunluo/config.json`（用户级别）
 5. **内置默认值**
@@ -178,6 +184,22 @@ yunluo 支持任何 OpenAI 兼容的 API 端点：
 ```
 
 `deterministic` 模式不需要任何外部 API，适合本地开发和测试。
+
+### CLI / Runtime 架构边界
+
+当前架构已引入 runtime-backed 路径：
+
+- CLI 保留 Commander 命令、Ink TUI、登录 UX、用户配置、工作区上下文收集、权限策略和流式显示。
+- Runtime 拥有 agent controller、LLM provider 调用、embedding provider 调用、SQLite 记忆数据库、目标系统、工作记忆和反思流程。
+- CLI 通过 `src/runtime-client/` 访问 runtime，不再在 chat/demo 路径中直接实例化 agent 或 provider。
+- HTTP runtime 暴露 `POST /v1/chat` SSE 流、`GET /v1/runtime/status`、`GET /v1/memory`、`GET /v1/memory/:id`、`GET /v1/goals`、`POST /v1/goals/transition`、`GET /v1/self`、`GET /v1/reflections`、`GET /v1/session/:id`、`POST /v1/tools/result` 和 `POST /v1/auth/login`。
+- hosted 模式下 CLI 不需要也不应持有 provider API key；embedding key 属于 runtime/server-side 配置。
+- BYOK/local runtime 仍可通过用户显式配置让本地 runtime 读取 provider 环境变量或配置。
+- CLI runtime token 存储在 `~/.yunluo/auth.json`，用户配置存储在 `~/.yunluo/config.json`。
+- 权限策略存储在 config 中，写文件、shell、patch、edit 默认 ask；git status/diff 默认 allow；危险 shell 命令不会默认自动允许。CLI 工具桥可执行 read/write/search/shell/git diff/status/edit file，并通过 `POST /v1/tools/result` 回传结构化结果；TUI 中可用 `/approve <tool-id>` 或 `/deny <tool-id>` 处理待审批工具请求。
+- Runtime 存储记录带有 `user_id` / `workspace_id` 作用域列；本地兼容默认用户是 `local-user`，workspace 来自 CLI 发送的 workspace context。启用 runtime auth 后，HTTP runtime 会把 bearer token 映射为 runtime user id，并用该 user id 隔离 session/memory/goal/reflection/audit 数据。
+
+详细设计见 [`docs/runtime-architecture.md`](docs/runtime-architecture.md)。
 
 ### 运行测试
 

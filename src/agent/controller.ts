@@ -1,6 +1,5 @@
 import type { LLMClient } from "../llm/client.js";
 import type { DbClient } from "../db/connection.js";
-import { getRawSqlite } from "../db/connection.js";
 import { createEpisodesRepository } from "../db/episodes-repository.js";
 import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
 import { createUserModelRepository } from "../db/user-model-repository.js";
@@ -10,7 +9,7 @@ import { createAuditLogRepository } from "../db/audit-log-repository.js";
 import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
 import { createGoalsRepository } from "../db/goals-repository.js";
 import type { EmbeddingClient } from "../llm/embedding-client.js";
-import { createEmbeddingStore } from "../memory/embedding-store.js";
+import type { EmbeddingStore } from "../memory/embedding-store.js";
 import { createCompositeScorer } from "../memory/composite-scorer.js";
 import { recordEpisode } from "../memory/episodic/episode-recorder.js";
 import { awakenMemories } from "../memory/memory-awakener.js";
@@ -22,6 +21,7 @@ import { createGoalManager } from "../planning/goal-manager.js";
 import { detectAndPersistConflicts } from "../planning/conflict-detector.js";
 import { createDefaultTrace, generateId } from "../models/defaults.js";
 import type { ChatTrace } from "../models/schemas.js";
+import type { DataScope } from "../db/scope.js";
 import {
   createDefaultWorkingMemory,
   mergeWorkingMemoryUpdate,
@@ -51,21 +51,40 @@ export interface AgentResult {
   trace: ChatTrace;
 }
 
-export function createAgentController(llm: LLMClient, db: DbClient, embeddingClient?: EmbeddingClient) {
-  const episodesRepo = createEpisodesRepository(db);
-  const semanticMemoriesRepo = createSemanticMemoriesRepository(db);
-  const userModelRepo = createUserModelRepository(db);
-  const selfModelRepo = createSelfModelRepository(db);
-  const reflectionsRepo = createReflectionsRepository(db);
-  const auditRepo = createAuditLogRepository(db);
-  const wmRepo = createWorkingMemoryRepository(db);
-  const goalsRepo = createGoalsRepository(db);
+export interface AgentControllerOptions {
+  embeddingClient?: EmbeddingClient;
+  embeddingStore?: EmbeddingStore;
+  scope?: DataScope;
+}
+
+function normalizeOptions(options?: EmbeddingClient | AgentControllerOptions, scope?: DataScope): AgentControllerOptions {
+  if (!options) return { scope };
+  if ("embed" in options && "embedBatch" in options) {
+    return { embeddingClient: options, scope };
+  }
+  return { ...options, scope: options.scope ?? scope };
+}
+
+export function createAgentController(
+  llm: LLMClient,
+  db: DbClient,
+  options?: EmbeddingClient | AgentControllerOptions,
+  scope?: DataScope,
+) {
+  const agentOptions = normalizeOptions(options, scope);
+  const episodesRepo = createEpisodesRepository(db, agentOptions.scope);
+  const semanticMemoriesRepo = createSemanticMemoriesRepository(db, agentOptions.scope);
+  const userModelRepo = createUserModelRepository(db, agentOptions.scope);
+  const selfModelRepo = createSelfModelRepository(db, agentOptions.scope);
+  const reflectionsRepo = createReflectionsRepository(db, agentOptions.scope);
+  const auditRepo = createAuditLogRepository(db, agentOptions.scope);
+  const wmRepo = createWorkingMemoryRepository(db, agentOptions.scope);
+  const goalsRepo = createGoalsRepository(db, agentOptions.scope);
 
   const goalManager = createGoalManager(goalsRepo, auditRepo);
 
-  const embeddingStore = embeddingClient
-    ? createEmbeddingStore(getRawSqlite(db))
-    : undefined;
+  const embeddingClient = agentOptions.embeddingClient;
+  const embeddingStore = agentOptions.embeddingStore;
   const scorer = embeddingClient && embeddingStore
     ? createCompositeScorer(embeddingClient, embeddingStore)
     : undefined;

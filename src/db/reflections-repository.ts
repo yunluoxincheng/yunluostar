@@ -1,30 +1,39 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import type { DbClient } from "./connection.js";
 import { reflections } from "./schema.js";
+import type { DataScope } from "./scope.js";
+import { withScope } from "./scope.js";
 
-export function createReflectionsRepository(db: DbClient) {
+export function createReflectionsRepository(db: DbClient, scope?: DataScope) {
+  const scoped = scope
+    ? and(eq(reflections.userId, scope.userId), eq(reflections.workspaceId, scope.workspaceId))
+    : undefined;
+
   return {
     insert(reflection: typeof reflections.$inferInsert) {
-      return db.insert(reflections).values(reflection).returning().get();
+      return db.insert(reflections).values(withScope(reflection, scope)).returning().get();
     },
 
     findById(id: string) {
-      return db.select().from(reflections).where(eq(reflections.id, id)).get();
+      return db.select().from(reflections).where(scoped ? and(eq(reflections.id, id), scoped) : eq(reflections.id, id)).get();
     },
 
     findByEpisodeId(episodeId: string) {
+      const condition = scoped ? and(eq(reflections.episodeId, episodeId), scoped) : eq(reflections.episodeId, episodeId);
       return db
         .select()
         .from(reflections)
-        .where(eq(reflections.episodeId, episodeId))
+        .where(condition)
         .get();
     },
 
     findRecent(limit = 20) {
-      return db
+      let query = db
         .select()
         .from(reflections)
-        .orderBy(desc(reflections.createdAt))
+        .$dynamic();
+      if (scoped) query = query.where(scoped);
+      return query.orderBy(desc(reflections.createdAt))
         .limit(limit)
         .all();
     },

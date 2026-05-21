@@ -125,6 +125,24 @@ describe("Repository persistence", () => {
       expect(high).toHaveLength(1);
       expect(high[0].id).toBe("mem-1");
     });
+
+    it("does not update memories outside the repository scope", () => {
+      db = createTestDb();
+      const repoA = createSemanticMemoriesRepository(db, { userId: "user-a", workspaceId: "workspace-a" });
+      const repoB = createSemanticMemoriesRepository(db, { userId: "user-b", workspaceId: "workspace-a" });
+
+      repoA.insert({
+        id: "mem-scoped", sourceEpisodeId: null,
+        content: "Scoped memory", category: null,
+        importance: 0.8, confidence: 0.9, status: "active",
+        supersededBy: null, createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const updated = repoB.updateStatus("mem-scoped", "deprecated");
+
+      expect(updated).toBeUndefined();
+      expect(repoA.findById("mem-scoped")?.status).toBe("active");
+    });
   });
 
   describe("UserModelRepository", () => {
@@ -317,6 +335,23 @@ describe("Repository persistence", () => {
 
       const updated = repo.updateConflictOf("g-1", "g-2");
       expect(updated.conflictOf).toBe("g-2");
+    });
+
+    it("does not update goals outside the repository scope", () => {
+      db = createTestDb();
+      const repoA = createGoalsRepository(db, { userId: "user-a", workspaceId: "workspace-a" });
+      const repoB = createGoalsRepository(db, { userId: "user-b", workspaceId: "workspace-a" });
+
+      repoA.insert({
+        id: "g-scoped", description: "Scoped goal", type: "short_term",
+        priority: 0.5, status: "suggested",
+        createdAt: new Date(), updatedAt: new Date(),
+      });
+
+      const updated = repoB.updateStatus("g-scoped", "active");
+
+      expect(updated).toBeUndefined();
+      expect(repoA.findById("g-scoped")?.status).toBe("suggested");
     });
   });
 

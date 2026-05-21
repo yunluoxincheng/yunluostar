@@ -5,6 +5,7 @@ import type { DbClient } from "../../src/db/connection.js";
 import { runMigrations } from "../../src/db/migrate.js";
 import { createLLMClient, createEmbeddingClient } from "../../src/llm/factory.js";
 import { createAgentController } from "../../src/agent/controller.js";
+import { createSqliteRuntimeVectorStore } from "../../src/runtime/vector-store.js";
 
 export function createTestDb(): DbClient & { close: () => void } {
   const sqlite = new Database(":memory:");
@@ -24,5 +25,6 @@ export function getTestSqlite(db: DbClient): Database.Database {
 export function createTestAgent(db: DbClient) {
   const llm = createLLMClient("deterministic");
   const embeddingClient = createEmbeddingClient();
-  return createAgentController(llm, db, embeddingClient);
+  const embeddingStore = createSqliteRuntimeVectorStore(db).store;
+  return createAgentController(llm, db, { embeddingClient, embeddingStore });
 }

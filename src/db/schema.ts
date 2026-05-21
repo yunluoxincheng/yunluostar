@@ -2,6 +2,8 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 
 export const episodes = sqliteTable("episodes", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   sessionId: text("session_id").notNull(),
   timestamp: integer("timestamp", { mode: "timestamp" }).notNull(),
   userInput: text("user_input").notNull(),
@@ -19,6 +21,8 @@ export const episodes = sqliteTable("episodes", {
 
 export const semanticMemories = sqliteTable("semantic_memories", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   sourceEpisodeId: text("source_episode_id").references(() => episodes.id),
   content: text("content").notNull(),
   category: text("category"),
@@ -32,6 +36,8 @@ export const semanticMemories = sqliteTable("semantic_memories", {
 
 export const userModel = sqliteTable("user_model", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   key: text("key").notNull(),
   value: text("value").notNull(),
   evidence: text("evidence").notNull(),
@@ -45,6 +51,8 @@ export const userModel = sqliteTable("user_model", {
 
 export const selfModel = sqliteTable("self_model", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   trait: text("trait").notNull(),
   value: text("value").notNull(),
   evidence: text("evidence").notNull(),
@@ -65,6 +73,8 @@ export type GoalStatus = (typeof GOAL_STATUSES)[number];
 
 export const goals = sqliteTable("goals", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   description: text("description").notNull(),
   type: text("type", { enum: [...GOAL_TYPES] }).notNull().default("long_term"),
   status: text("status", { enum: [...GOAL_STATUSES] }).notNull().default("active"),
@@ -82,6 +92,8 @@ export const goals = sqliteTable("goals", {
 
 export const reflections = sqliteTable("reflections", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   episodeId: text("episode_id").references(() => episodes.id).notNull(),
   whatWorked: text("what_worked"),
   whatFailed: text("what_failed"),
@@ -92,6 +104,8 @@ export const reflections = sqliteTable("reflections", {
 
 export const auditLogs = sqliteTable("audit_logs", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   targetTable: text("target_table").notNull(),
   targetId: text("target_id").notNull(),
   action: text("action", { enum: ["create", "update", "deprecate", "supersede", "confidence_lower", "approve", "reject", "pause", "complete", "conflict"] }).notNull(),
@@ -103,6 +117,8 @@ export const auditLogs = sqliteTable("audit_logs", {
 
 export const workingMemorySnapshots = sqliteTable("working_memory_snapshots", {
   id: text("id").primaryKey(),
+  userId: text("user_id").notNull().default("local-user"),
+  workspaceId: text("workspace_id").notNull().default("default-workspace"),
   sessionId: text("session_id").notNull(),
   snapshot: text("snapshot").notNull(),
   episodeId: text("episode_id"),

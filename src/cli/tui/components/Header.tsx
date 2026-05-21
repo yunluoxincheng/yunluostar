@@ -7,9 +7,10 @@ interface HeaderProps {
   provider: string;
   model: string;
   sessionId: string;
+  runtimeMode: string;
 }
 
-export function Header({ version, provider, model, sessionId }: HeaderProps) {
+export function Header({ version, provider, model, sessionId, runtimeMode }: HeaderProps) {
   const modelLabel = model === "default" ? provider : `${provider} / ${model}`;
   return (
     <Box flexDirection="column" marginBottom={0}>
@@ -27,6 +28,8 @@ export function Header({ version, provider, model, sessionId }: HeaderProps) {
         <Text color={theme.accent}>{modelLabel}</Text>
         <Text color={theme.quiet}>{" · session "}</Text>
         <Text color={theme.goal}>{sessionId}</Text>
+        <Text color={theme.quiet}>{" · runtime "}</Text>
+        <Text color={theme.accent}>{runtimeMode}</Text>
       </Box>
     </Box>
   );

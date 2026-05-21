@@ -2,6 +2,21 @@ import { z } from "zod";
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve, dirname } from "node:path";
+import { runtimeModeSchema } from "./protocol/runtime.js";
+import { redactRecord } from "./security/redaction.js";
+
+export const permissionActionSchema = z.enum(["allow", "ask", "deny"]);
+
+export const permissionPolicySchema = z.object({
+  readFile: permissionActionSchema.default("ask"),
+  writeFile: permissionActionSchema.default("ask"),
+  search: permissionActionSchema.default("allow"),
+  shell: permissionActionSchema.default("ask"),
+  gitStatus: permissionActionSchema.default("allow"),
+  gitDiff: permissionActionSchema.default("allow"),
+  applyPatch: permissionActionSchema.default("ask"),
+  editFile: permissionActionSchema.default("ask"),
+});
 
 export const configSchema = z.object({
   provider: z.enum(["deterministic", "openai-compatible"]).default("deterministic"),
@@ -13,6 +28,11 @@ export const configSchema = z.object({
   timeout: z.number().int().positive().optional(),
   defaultSessionId: z.string().default("default"),
   databasePath: z.string().default("data/yunluostar.db"),
+  runtimeMode: runtimeModeSchema.default("embedded"),
+  runtimeUrl: z.string().url().default("http://127.0.0.1:3927"),
+  runtimeAuthRequired: z.boolean().default(false),
+  permissionPolicy: permissionPolicySchema.default({}),
+  contextFiles: z.array(z.string()).default(["AGENTS.md", "CLAUDE.md"]),
 });
 
 export type AppConfig = z.infer<typeof configSchema>;
@@ -55,6 +75,8 @@ function applyEnvOverrides(partial: Partial<AppConfig>): Partial<AppConfig> {
   if (process.env.YUNLUO_MODEL) env.model = process.env.YUNLUO_MODEL;
   if (process.env.YUNLUO_TEMPERATURE) env.temperature = Number(process.env.YUNLUO_TEMPERATURE);
   if (process.env.YUNLUO_TIMEOUT) env.timeout = Number(process.env.YUNLUO_TIMEOUT);
+  if (process.env.YUNLUO_RUNTIME_MODE) env.runtimeMode = process.env.YUNLUO_RUNTIME_MODE as AppConfig["runtimeMode"];
+  if (process.env.YUNLUO_RUNTIME_URL) env.runtimeUrl = process.env.YUNLUO_RUNTIME_URL;
   if (process.env.DATABASE_URL) env.databasePath = process.env.DATABASE_URL;
   if (process.env.LLM_PROVIDER) env.provider = process.env.LLM_PROVIDER as AppConfig["provider"];
   return { ...partial, ...env };
@@ -81,12 +103,7 @@ export function getResolvedApiKey(config: AppConfig): string | undefined {
 }
 
 export function redactConfig(config: AppConfig): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...config };
-  if (typeof config.apiKey === "string" && config.apiKey.length > 0) {
-    const key = config.apiKey;
-    result.apiKey = key.length <= 8 ? "****" : `${key.slice(0, 4)}${"*".repeat(key.length - 4)}`;
-  }
-  return result;
+  return redactRecord(config as Record<string, unknown>);
 }
 
 const KNOWN_CONFIG_KEYS = new Set(Object.keys(configSchema.shape));

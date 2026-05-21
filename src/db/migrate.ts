@@ -6,6 +6,8 @@ import { DEFAULT_EMBEDDING_DIMENSIONS } from "../memory/embedding-store.js";
 const CREATE_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS episodes (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     session_id TEXT NOT NULL,
     timestamp INTEGER NOT NULL,
     user_input TEXT NOT NULL,
@@ -23,6 +25,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS semantic_memories (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     source_episode_id TEXT REFERENCES episodes(id),
     content TEXT NOT NULL,
     category TEXT,
@@ -36,6 +40,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS user_model (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     key TEXT NOT NULL,
     value TEXT NOT NULL,
     evidence TEXT NOT NULL,
@@ -49,6 +55,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS self_model (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     trait TEXT NOT NULL,
     value TEXT NOT NULL,
     evidence TEXT NOT NULL,
@@ -63,6 +71,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS goals (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     description TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'long_term' CHECK(type IN ('core','long_term','medium_term','short_term','operational')),
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('suggested','active','paused','completed','rejected','deprecated')),
@@ -80,6 +90,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS reflections (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     episode_id TEXT NOT NULL REFERENCES episodes(id),
     what_worked TEXT,
     what_failed TEXT,
@@ -90,6 +102,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS audit_logs (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     target_table TEXT NOT NULL,
     target_id TEXT NOT NULL,
     action TEXT NOT NULL CHECK(action IN ('create','update','deprecate','supersede','confidence_lower','approve','reject','pause','complete','conflict')),
@@ -101,6 +115,8 @@ const CREATE_STATEMENTS = [
 
   `CREATE TABLE IF NOT EXISTS working_memory_snapshots (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'local-user',
+    workspace_id TEXT NOT NULL DEFAULT 'default-workspace',
     session_id TEXT NOT NULL,
     snapshot TEXT NOT NULL,
     episode_id TEXT,
@@ -119,6 +135,29 @@ export function runMigrations(db: DbClient): void {
 
   migrateGoalsTable(sqlite);
   migrateAuditLogsTable(sqlite);
+  migrateScopeColumns(sqlite);
+}
+
+function ensureColumn(sqlite: ReturnType<typeof getRawSqlite>, table: string, column: string, ddl: string): void {
+  const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (cols.some((c) => c.name === column)) return;
+  sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+
+function migrateScopeColumns(sqlite: ReturnType<typeof getRawSqlite>): void {
+  for (const table of [
+    "episodes",
+    "semantic_memories",
+    "user_model",
+    "self_model",
+    "goals",
+    "reflections",
+    "audit_logs",
+    "working_memory_snapshots",
+  ]) {
+    ensureColumn(sqlite, table, "user_id", "user_id TEXT NOT NULL DEFAULT 'local-user'");
+    ensureColumn(sqlite, table, "workspace_id", "workspace_id TEXT NOT NULL DEFAULT 'default-workspace'");
+  }
 }
 
 function needsRebuild(sqlite: ReturnType<typeof getRawSqlite>, table: string, marker: string): boolean {

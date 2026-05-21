@@ -7,6 +7,7 @@ import { registerGoalsCommand } from "./goals-command.js";
 import { registerReflectionsCommand } from "./reflections-command.js";
 import { registerDemoCommand } from "./demo-command.js";
 import { registerConfigCommand } from "./config-command.js";
+import { registerRuntimeCommand } from "./runtime-command.js";
 
 export function addGlobalOptions(program: Command): void {
   program
@@ -16,7 +17,9 @@ export function addGlobalOptions(program: Command): void {
     .option("--temperature <temp>", "LLM temperature")
     .option("--timeout <ms>", "LLM request timeout in ms")
     .option("--session <id>", "Default session ID")
-    .option("--db <path>", "Database path");
+    .option("--db <path>", "Database path")
+    .option("--runtime-mode <mode>", "Runtime mode: embedded, local, hosted")
+    .option("--runtime-url <url>", "Runtime HTTP URL");
 }
 
 export function cliOverridesFromOpts(opts: Record<string, unknown>): Record<string, unknown> {
@@ -28,6 +31,8 @@ export function cliOverridesFromOpts(opts: Record<string, unknown>): Record<stri
   if (opts.timeout) overrides.timeout = Number(opts.timeout);
   if (opts.session) overrides.defaultSessionId = opts.session;
   if (opts.db) overrides.databasePath = opts.db;
+  if (opts.runtimeMode) overrides.runtimeMode = opts.runtimeMode;
+  if (opts.runtimeUrl) overrides.runtimeUrl = opts.runtimeUrl;
   return overrides;
 }
 
@@ -49,6 +54,7 @@ export function createProgram(): Command {
   registerReflectionsCommand(program);
   registerDemoCommand(program);
   registerConfigCommand(program);
+  registerRuntimeCommand(program);
 
   return program;
 }

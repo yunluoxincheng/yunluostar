@@ -4,7 +4,8 @@
   "description": "A consciousness-like agent prototype with long-term memory, self-model, goal system, and reflection",
   "type": "module",
   "bin": {
-    "yunluo": "./bin/yunluo"
+    "yunluo": "./bin/yunluo",
+    "yunluostar": "./bin/yunluo"
   },
   "files": [
     "dist",

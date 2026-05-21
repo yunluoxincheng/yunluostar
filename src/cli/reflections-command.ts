@@ -6,8 +6,9 @@ export function registerReflectionsCommand(program: Command): void {
     .description("List recent reflections")
     .option("-l, --limit <n>", "Number of entries", "20")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
+    .action(async (options, cmd) => {
       const { handleReflectionsList } = await import("./reflections-handler.js");
-      await handleReflectionsList(options);
+      const { cliOverridesFromOpts } = await import("./index.js");
+      await handleReflectionsList(options, cliOverridesFromOpts(cmd.parent?.opts() ?? {}));
     });
 }
