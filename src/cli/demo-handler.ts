@@ -1,7 +1,7 @@
 import { loadConfig } from "../config.js";
 import { createDbConnection, closeDbConnection } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { createLLMClient, createEmbeddingClientFromConfig } from "../llm/factory.js";
+import { createLLMClient, createEmbeddingClient } from "../llm/factory.js";
 import { createAgentController } from "../agent/controller.js";
 
 export async function handleDemo(options: {
@@ -12,7 +12,7 @@ export async function handleDemo(options: {
   try {
     runMigrations(db);
     const llm = createLLMClient(config.provider, config);
-    const embeddingClient = createEmbeddingClientFromConfig(config.provider, config);
+    const embeddingClient = createEmbeddingClient();
     const agent = createAgentController(llm, db, embeddingClient);
     const sessionId = "demo-session";
 

@@ -1,12 +1,11 @@
 import type { LLMClient } from "./client.js";
 import { DeterministicLLMClient } from "./deterministic-client.js";
 import { OpenAICompatibleLLMClient } from "./openai-compatible-client.js";
-import type { EmbeddingClient } from "./embedding-client.js";
-import { OpenAIEmbeddingClient, DeterministicEmbeddingClient } from "./embedding-client.js";
 import type { AppConfig } from "../config.js";
 import { getResolvedApiKey } from "../config.js";
 
 export { safeExtraction, safeReflection, safeConsolidation } from "./safe-outputs.js";
+export { createEmbeddingClient } from "./embedding-provider.js";
 
 export function createLLMClient(provider: string, config?: AppConfig): LLMClient {
   switch (provider) {
@@ -30,25 +29,5 @@ export function createLLMClient(provider: string, config?: AppConfig): LLMClient
       return new DeterministicLLMClient();
     default:
       throw new Error(`Unknown provider: "${provider}". Supported providers: deterministic, openai-compatible.`);
-  }
-}
-
-export function createEmbeddingClientFromConfig(provider: string, config?: AppConfig): EmbeddingClient | undefined {
-  switch (provider) {
-    case "openai-compatible":
-      if (!config) return undefined;
-      const apiKey = getResolvedApiKey(config);
-      if (!apiKey) return undefined;
-      return new OpenAIEmbeddingClient({
-        baseUrl: config.baseUrl ?? "https://api.openai.com/v1",
-        apiKey,
-        model: config.embeddingModel,
-        dimensions: config.embeddingDimensions,
-        timeout: config.timeout,
-      });
-    case "deterministic":
-      return new DeterministicEmbeddingClient(config?.embeddingDimensions);
-    default:
-      return undefined;
   }
 }

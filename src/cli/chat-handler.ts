@@ -2,7 +2,7 @@ import { chatInputSchema } from "../models/schemas.js";
 import { loadConfig, type AppConfig } from "../config.js";
 import { createDbConnection, closeDbConnection } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { createLLMClient, createEmbeddingClientFromConfig } from "../llm/factory.js";
+import { createLLMClient, createEmbeddingClient } from "../llm/factory.js";
 import { createAgentController } from "../agent/controller.js";
 
 export async function handleChat(
@@ -52,7 +52,7 @@ async function processChat(
   }
 
   const llm = createLLMClient(config.provider, config);
-  const embeddingClient = createEmbeddingClientFromConfig(config.provider, config);
+  const embeddingClient = createEmbeddingClient();
   const agent = createAgentController(llm, db, embeddingClient);
   const result = await agent.chat(parsed.data.message, { sessionId: parsed.data.session ?? sessionId });
 

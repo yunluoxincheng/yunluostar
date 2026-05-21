@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import type { AppConfig } from "../../../config.js";
 import { createDbConnection, closeDbConnection } from "../../../db/connection.js";
 import { runMigrations } from "../../../db/migrate.js";
-import { createLLMClient, createEmbeddingClientFromConfig } from "../../../llm/factory.js";
+import { createLLMClient, createEmbeddingClient } from "../../../llm/factory.js";
 import { createAgentController } from "../../../agent/controller.js";
 import type { PipelineStage } from "../../../agent/controller.js";
 import { InteractiveRouter, STAGE_LABELS } from "../../interactive-router.js";
@@ -64,7 +64,7 @@ export function useInteractiveAgent(config: AppConfig) {
     try {
       runMigrations(db);
       const llm = createLLMClient(config.provider, config);
-      const embeddingClient = createEmbeddingClientFromConfig(config.provider, config);
+      const embeddingClient = createEmbeddingClient();
       const agent = createAgentController(llm, db, embeddingClient);
 
       let fullResponse = "";
