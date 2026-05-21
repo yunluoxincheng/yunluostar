@@ -11,3 +11,4 @@ coverage/
 drizzle/
 # Local config may contain secrets
 .yunluo/config.json
+.env
