@@ -1,3 +1,5 @@
+Superseded: This goal's CLI-distributed Claude Code / Codex / Pi-like product direction has been superseded by `docs/goals/pivot-to-cognitive-bot-platform.md`. Preserve the useful runtime boundary work from this document, but do not use it as the current product direction.
+
 Goal: Evolve yunluostar into a CLI-distributed, runtime-backed agent platform. Do not stop until each phase’s acceptance criteria are met and the overall architecture boundary is enforced.
 
 ## 1. Project Background

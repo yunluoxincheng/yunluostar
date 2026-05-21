@@ -3,7 +3,7 @@ import type { Command } from "commander";
 export function registerChatCommand(program: Command): void {
   program
     .command("chat")
-    .description("Start a chat interaction with the agent")
+    .description("Debug chat (ephemeral, does not write Bot long-term memory)")
     .option("-s, --session <sessionId>", "Session identifier")
     .option("-m, --message <message>", "Chat message (non-interactive mode)")
     .option("--json", "Output result as JSON with trace identifiers")

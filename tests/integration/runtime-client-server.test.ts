@@ -60,8 +60,9 @@ describe("runtime HTTP/SSE integration", () => {
 
       expect(memories.total).toBeGreaterThanOrEqual(0);
       expect(self.total).toBeGreaterThanOrEqual(0);
-      expect(reflections.total).toBeGreaterThanOrEqual(1);
-      expect(session.sessionId).toBe("s1");
+      // CLI chat is ephemeral: no reflections or working memory snapshots written
+      expect(reflections.total).toBe(0);
+      expect(session.workingMemory).toBeUndefined();
     } finally {
       await server.close();
     }
@@ -230,7 +231,8 @@ describe("runtime HTTP/SSE integration", () => {
       const sessionA = await sessionAResponse.json() as { workingMemory?: unknown };
       const sessionB = await sessionBResponse.json() as { workingMemory?: unknown };
 
-      expect(sessionA.workingMemory).toBeDefined();
+      // CLI chat is ephemeral: no working memory snapshots written
+      expect(sessionA.workingMemory).toBeUndefined();
       expect(sessionB.workingMemory).toBeUndefined();
     } finally {
       await server.close();
@@ -287,7 +289,8 @@ describe("runtime HTTP/SSE integration", () => {
       const sessionA = await userA.json() as { workingMemory?: unknown };
       const sessionB = await userB.json() as { workingMemory?: unknown };
 
-      expect(sessionA.workingMemory).toBeDefined();
+      // CLI chat is ephemeral: no working memory snapshots written for any user
+      expect(sessionA.workingMemory).toBeUndefined();
       expect(sessionB.workingMemory).toBeUndefined();
     } finally {
       await server.close();

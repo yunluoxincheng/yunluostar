@@ -33,6 +33,7 @@ export interface AgentConfig {
   sessionId: string;
   onToken?: (token: string) => void;
   onStage?: (stage: PipelineStage) => void;
+  ephemeral?: boolean;
 }
 
 export type PipelineStage =
@@ -92,6 +93,15 @@ export function createAgentController(
   return {
     async chat(userInput: string, config: AgentConfig): Promise<AgentResult> {
       const { onStage } = config;
+
+      // Ephemeral mode: LLM-only, no persistent cognitive state writes.
+      if (config.ephemeral) {
+        onStage?.("thinking");
+        const response = await llm.generateResponse("", userInput, config.onToken);
+        const trace = createDefaultTrace("ephemeral-no-episode");
+        onStage?.("done");
+        return { response, trace };
+      }
 
       onStage?.("restoring");
       const latestSnapshot = wmRepo.findLatestBySession(config.sessionId);

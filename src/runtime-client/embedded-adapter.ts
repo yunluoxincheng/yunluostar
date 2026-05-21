@@ -2,6 +2,7 @@ import type { AppConfig } from "../config.js";
 import type { ChatResult, GoalTransition } from "../models/schemas.js";
 import { goalTransitionSchema } from "../models/schemas.js";
 import { chatRequestSchema, type ChatRequest, type RuntimeListResponse, type RuntimeStatus, type SessionState, type ToolResult } from "../protocol/runtime.js";
+import { botMessageRequestSchema, type BotMessageRequest, type BotMessageResponse } from "../bot/protocol.js";
 import { createLocalAgentRuntime } from "../runtime/local-agent-runtime.js";
 import { collectWorkspaceContext } from "./workspace-context.js";
 import type { RuntimeChatOptions, RuntimeClient } from "./client.js";
@@ -19,6 +20,10 @@ class EmbeddedRuntimeClient implements RuntimeClient {
 
   chat(request: ChatRequest, options?: RuntimeChatOptions): Promise<ChatResult> {
     return this.runtime.chat(chatRequestSchema.parse(request), { onEvent: options?.onEvent });
+  }
+
+  sendBotMessage(request: BotMessageRequest): Promise<BotMessageResponse> {
+    return this.runtime.handleBotMessage(botMessageRequestSchema.parse(request));
   }
 
   listMemory(limit?: number): Promise<RuntimeListResponse> {

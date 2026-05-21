@@ -16,6 +16,12 @@ import {
 import { toolResultSchema } from "../protocol/runtime.js";
 import type { ChatResult, GoalTransition } from "../models/schemas.js";
 import { goalTransitionSchema } from "../models/schemas.js";
+import {
+  botMessageRequestSchema,
+  botMessageResponseSchema,
+  type BotMessageRequest,
+  type BotMessageResponse,
+} from "../bot/protocol.js";
 import { collectWorkspaceContext } from "./workspace-context.js";
 
 export interface RuntimeChatOptions {
@@ -25,6 +31,7 @@ export interface RuntimeChatOptions {
 export interface RuntimeClient {
   status(): Promise<RuntimeStatus>;
   chat(request: ChatRequest, options?: RuntimeChatOptions): Promise<ChatResult>;
+  sendBotMessage(request: BotMessageRequest): Promise<BotMessageResponse>;
   listMemory(limit?: number): Promise<RuntimeListResponse>;
   getMemory(id: string): Promise<Record<string, unknown> | null>;
   listGoals(filters?: { status?: string; type?: string }): Promise<RuntimeListResponse>;
@@ -89,6 +96,10 @@ class LazyEmbeddedRuntimeClient implements RuntimeClient {
 
   async chat(request: ChatRequest, options?: RuntimeChatOptions): Promise<ChatResult> {
     return (await this.client()).chat(chatRequestSchema.parse(request), options);
+  }
+
+  async sendBotMessage(request: BotMessageRequest): Promise<BotMessageResponse> {
+    return (await this.client()).sendBotMessage(botMessageRequestSchema.parse(request));
   }
 
   async listMemory(limit?: number): Promise<RuntimeListResponse> {
@@ -163,6 +174,15 @@ class HttpRuntimeClient implements RuntimeClient {
 
     if (!finalResult) throw new Error("Runtime chat stream ended without a final event.");
     return finalResult;
+  }
+
+  async sendBotMessage(request: BotMessageRequest): Promise<BotMessageResponse> {
+    const response = await fetch(new URL("/v1/bot/message", this.config.runtimeUrl), {
+      method: "POST",
+      headers: requestHeaders(this.config),
+      body: JSON.stringify(botMessageRequestSchema.parse(request)),
+    });
+    return readJsonResponse(response, (payload) => botMessageResponseSchema.parse(payload));
   }
 
   async listMemory(limit?: number): Promise<RuntimeListResponse> {

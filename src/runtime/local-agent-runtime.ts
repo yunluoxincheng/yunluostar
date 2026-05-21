@@ -27,15 +27,27 @@ import type {
   SessionState,
   ToolResult,
 } from "../protocol/runtime.js";
+import type { BotMessageRequest, BotMessageResponse, BotStreamEvent, BotScope } from "../bot/protocol.js";
+import { botScopeFromRequest, botScopeToDataScope, deriveSessionId } from "../bot/scope.js";
+import type { PluginRegistry } from "../plugins/registry.js";
+import { createPluginRegistry } from "../plugins/registry.js";
+import type { PluginHookContext } from "../plugins/hooks.js";
 
 export interface RuntimeChatHandlers {
   onEvent?: (event: RuntimeEvent) => void | Promise<void>;
   signal?: AbortSignal;
 }
 
+export interface BotMessageHandlers {
+  onEvent?: (event: BotStreamEvent) => void | Promise<void>;
+  signal?: AbortSignal;
+}
+
 export interface AgentRuntime {
   status(): Promise<RuntimeStatus>;
   chat(request: ChatRequest, handlers?: RuntimeChatHandlers, userId?: string): Promise<ChatResult>;
+  handleBotMessage(request: BotMessageRequest, handlers?: BotMessageHandlers): Promise<BotMessageResponse>;
+  getPluginRegistry(): PluginRegistry;
   listMemory(limit?: number, workspaceId?: string, userId?: string): Promise<RuntimeListResponse>;
   getMemory(id: string, workspaceId?: string, userId?: string): Promise<Record<string, unknown> | null>;
   listGoals(filters?: { status?: string; type?: string; workspaceId?: string; userId?: string }): Promise<RuntimeListResponse>;
@@ -60,9 +72,10 @@ function summarizeToolResult(result: ToolResult): string {
   return `Tool ${result.toolRequestId} completed with status ${result.status}. ${detail.slice(0, 1_000)}`.trim();
 }
 
-export function createLocalAgentRuntime(config: AppConfig): AgentRuntime {
+export function createLocalAgentRuntime(config: AppConfig, pluginRegistry?: PluginRegistry): AgentRuntime {
   const storage = createSqliteRuntimeStorage(config);
   const pendingToolResults = new Map<string, (result: ToolResult) => void>();
+  const plugins = pluginRegistry ?? createPluginRegistry();
 
   function waitForToolResult(requestId: string, toolRequestId: string, signal?: AbortSignal): Promise<ToolResult> {
     return new Promise((resolve, reject) => {
@@ -121,6 +134,7 @@ export function createLocalAgentRuntime(config: AppConfig): AgentRuntime {
         });
         const result = await agent.chat(effectiveInput, {
           sessionId: request.sessionId,
+          ephemeral: true,
           onToken: (token: string) => handlers?.onEvent?.({ type: "token", requestId: request.requestId, token }),
           onStage: (stage: PipelineStage) => handlers?.onEvent?.({ type: "stage", requestId: request.requestId, stage }),
         });
@@ -135,6 +149,86 @@ export function createLocalAgentRuntime(config: AppConfig): AgentRuntime {
         });
         throw error;
       });
+    },
+
+    async handleBotMessage(request: BotMessageRequest, handlers?: BotMessageHandlers): Promise<BotMessageResponse> {
+      const traceId = generateId();
+      const botScope = botScopeFromRequest(request);
+      const dataScope = botScopeToDataScope(botScope);
+      const sessionId = deriveSessionId(botScope);
+
+      const hookContext: PluginHookContext = { request };
+
+      return storage.withDb(async (db) => {
+        const llm = createLLMClient(config.provider, config);
+        const embeddingClient = createRuntimeEmbeddingClient();
+        const vectorStore = createSqliteRuntimeVectorStore(db);
+        const agent = createAgentController(llm, db, {
+          embeddingClient,
+          embeddingStore: vectorStore.store,
+          scope: dataScope,
+        });
+
+        handlers?.onEvent?.({ type: "stage", traceId, stage: "received" });
+
+        // Run message.received plugin hooks
+        const receivedTraces = await plugins.runHook("message.received", hookContext);
+        for (const t of receivedTraces) {
+          handlers?.onEvent?.({ type: "plugin", traceId, event: t });
+        }
+
+        const result = await agent.chat(request.text, {
+          sessionId,
+          onToken: (token: string) => handlers?.onEvent?.({ type: "token", traceId, token }),
+          onStage: (stage) => {
+            const botStage = stage === "restoring" ? "received"
+              : stage === "awakening" ? "awakening"
+              : stage === "thinking" ? "thinking"
+              : stage === "recording" ? "recording"
+              : stage === "reflecting" ? "reflecting"
+              : stage === "consolidating" ? "consolidating"
+              : stage === "correcting" ? "consolidating"
+              : stage === "saving" ? "done"
+              : "done";
+            handlers?.onEvent?.({ type: "stage", traceId, stage: botStage });
+          },
+        });
+
+        const response: BotMessageResponse = {
+          responseText: result.response,
+          traceId,
+          sessionId,
+          episodeId: result.trace.episodeId,
+          reflectionId: result.trace.reflectionId,
+          memoryIds: result.trace.recalledMemoryIds,
+          goalIds: [...(result.trace.selectedGoalId ? [result.trace.selectedGoalId] : []), ...result.trace.suggestedGoalIds],
+          pluginEvents: [],
+        };
+
+        // Run message.responding plugin hooks
+        hookContext.response = response;
+        const respondingTraces = await plugins.runHook("message.responding", hookContext);
+        for (const t of respondingTraces) {
+          handlers?.onEvent?.({ type: "plugin", traceId, event: t });
+        }
+
+        response.pluginEvents = [...receivedTraces, ...respondingTraces];
+
+        handlers?.onEvent?.({ type: "final", traceId, response });
+        return response;
+      }).catch((error) => {
+        handlers?.onEvent?.({
+          type: "error",
+          traceId,
+          code: "bot_runtime_error",
+          message: (error as Error).message,
+        });
+        throw error;
+      });
+    },
+
+    getPluginRegistry(): PluginRegistry {
+      return plugins;
     },
 
     async listMemory(limit = 20, workspaceId?: string, userId?: string): Promise<RuntimeListResponse> {

@@ -8,6 +8,11 @@ import {
   toolResultSchema,
   type RuntimeEvent,
 } from "../protocol/runtime.js";
+import {
+  botMessageRequestSchema,
+  botStreamEventSchema,
+  type BotStreamEvent,
+} from "../bot/protocol.js";
 import { goalTransitionSchema } from "../models/schemas.js";
 import { createLocalAgentRuntime, type AgentRuntime } from "./local-agent-runtime.js";
 
@@ -34,6 +39,12 @@ function sendJson(res: ServerResponse, statusCode: number, payload: unknown): vo
 
 function sendSse(res: ServerResponse, event: RuntimeEvent): void {
   const parsed = runtimeEventSchema.parse(event);
+  res.write(`event: ${parsed.type}\n`);
+  res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+}
+
+function sendBotSse(res: ServerResponse, event: BotStreamEvent): void {
+  const parsed = botStreamEventSchema.parse(event);
   res.write(`event: ${parsed.type}\n`);
   res.write(`data: ${JSON.stringify(parsed)}\n\n`);
 }
@@ -111,6 +122,39 @@ export function createRuntimeHttpServer(config: AppConfig, options: RuntimeServe
         } catch {
           // Runtime emits a protocol error event before rejecting. Keep the
           // response as SSE and close it instead of attempting a JSON error.
+        } finally {
+          completed = true;
+        }
+        return res.end();
+      }
+
+      // Bot API: POST /v1/bot/message (non-streaming)
+      if (path === "/v1/bot/message" && req.method === "POST") {
+        const body = botMessageRequestSchema.parse(await readJson(req));
+        const response = await runtime.handleBotMessage(body);
+        return sendJson(res, 200, response);
+      }
+
+      // Bot API: POST /v1/bot/message/stream (SSE streaming)
+      if (path === "/v1/bot/message/stream" && req.method === "POST") {
+        const body = botMessageRequestSchema.parse(await readJson(req));
+        const abortController = new AbortController();
+        let completed = false;
+        res.on("close", () => {
+          if (!completed) abortController.abort();
+        });
+        res.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        });
+        try {
+          await runtime.handleBotMessage(body, {
+            onEvent: (event) => sendBotSse(res, event),
+            signal: abortController.signal,
+          });
+        } catch {
+          // Error event already emitted by runtime
         } finally {
           completed = true;
         }

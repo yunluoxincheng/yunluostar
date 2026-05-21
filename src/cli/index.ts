@@ -41,7 +41,7 @@ export function createProgram(): Command {
 
   program
     .name("yunluo")
-    .description("A consciousness-like agent prototype")
+    .description("yunluostar admin/debug/developer CLI — for managing and inspecting the Bot Runtime")
     .version("0.1.0")
     .allowUnknownOption(false);
 
