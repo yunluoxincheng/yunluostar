@@ -68,7 +68,7 @@ tests/
 
 ## 设计文档
 
-所有设计文档在 `docs/conscious_agent_plan/` 下，按编号 00-15 组织。产品方向文档：`docs/goals/pivot-to-cognitive-bot-platform.md`。
+所有设计文档在 `docs/conscious_agent_plan/` 下，按编号 00-15 组织。产品方向文档：`docs/goals/archive/pivot-to-cognitive-bot-platform.md`。
 
 ## 项目原则
 

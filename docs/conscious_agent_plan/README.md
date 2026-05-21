@@ -4,7 +4,7 @@ yunluostar 正在从 CLI-first agent 研究原型转型为多平台认知型 Age
 
 **产品方向：** 多平台认知型 Bot 平台，用户通过 WebChat、HTTP webhook、IM 适配器等 Bot 接口与 Agent 交互。CLI 保留为 admin/debug/developer 工具。
 
-详见 `docs/goals/pivot-to-cognitive-bot-platform.md`。
+详见 `docs/goals/archive/pivot-to-cognitive-bot-platform.md`。
 
 ## 核心思想
 

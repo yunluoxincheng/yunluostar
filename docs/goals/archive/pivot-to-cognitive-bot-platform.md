@@ -1,6 +1,6 @@
 Goal: Pivot yunluostar into a next-generation cognitive Agentic Bot platform inspired by AstrBot and openclaw. Do not stop until the platform direction, runtime boundary, MVP entry points, and cognitive core acceptance criteria are implemented and verified.
 
-Supersedes product-direction assumptions in `docs/goals/separate-cli-from-agent-runtime.md` where they frame yunluostar as a CLI-distributed Claude Code / Codex / Pi-like agent platform. The runtime boundary from that work remains useful, but the product surface and long-term memory ownership are now Bot-platform-first.
+Supersedes product-direction assumptions in `docs/goals/archive/separate-cli-from-agent-runtime.md` where they frame yunluostar as a CLI-distributed Claude Code / Codex / Pi-like agent platform. The runtime boundary from that work remains useful, but the product surface and long-term memory ownership are now Bot-platform-first.
 
 ## 1. Project Background
 

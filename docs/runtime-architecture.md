@@ -4,7 +4,7 @@ This document describes the Bot Runtime architecture for yunluostar — a multi-
 
 ## Product Direction
 
-yunluostar is evolving from a CLI-first agent into a multi-platform Agentic Bot platform. The runtime is now the **Bot Runtime** — the product core — while the CLI is an admin/debug/developer tool. See `docs/goals/pivot-to-cognitive-bot-platform.md` for the full product direction.
+yunluostar is evolving from a CLI-first agent into a multi-platform Agentic Bot platform. The runtime is now the **Bot Runtime** — the product core — while the CLI is an admin/debug/developer tool. See `docs/goals/archive/pivot-to-cognitive-bot-platform.md` for the full product direction.
 
 ## Boundary
 

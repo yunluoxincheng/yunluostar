@@ -204,7 +204,7 @@ yunluostar 采用 Bot Runtime 架构：
 - hosted 模式下用户不需要持有 provider API key；embedding key 属于 runtime/server-side 配置。
 - Runtime 存储记录带有 `user_id` / `workspace_id` 作用域列，Bot 对话通过 `bot:` 前缀的 userId/workspaceId 实现平台/对话/用户隔离。
 
-详细设计见 [`docs/runtime-architecture.md`](docs/runtime-architecture.md) 和 [`docs/goals/pivot-to-cognitive-bot-platform.md`](docs/goals/pivot-to-cognitive-bot-platform.md)。
+详细设计见 [`docs/runtime-architecture.md`](docs/runtime-architecture.md) 和 [`docs/goals/archive/pivot-to-cognitive-bot-platform.md`](docs/goals/archive/pivot-to-cognitive-bot-platform.md)。
 
 ### 运行测试
 
@@ -230,7 +230,7 @@ yunluostar 正在从 CLI-first agent 研究原型转型为多平台认知型 Age
 
 ### 当前阶段：Bot 平台转型
 
-产品方向已从 CLI-first agent 转向多平台 Bot 平台。详见 [`docs/goals/pivot-to-cognitive-bot-platform.md`](docs/goals/pivot-to-cognitive-bot-platform.md)。
+产品方向已从 CLI-first agent 转向多平台 Bot 平台。详见 [`docs/goals/archive/pivot-to-cognitive-bot-platform.md`](docs/goals/archive/pivot-to-cognitive-bot-platform.md)。
 
 下一阶段目标：
 - Bot Protocol & Scope — 平台无关协议和 scope 映射
@@ -260,7 +260,7 @@ yunluostar 正在从 CLI-first agent 研究原型转型为多平台认知型 Age
 | [11_开发路线](docs/conscious_agent_plan/11_分阶段开发路线.md) | 开发计划 |
 | [12_MVP任务清单](docs/conscious_agent_plan/12_MVP_开发任务清单.md) | Sprint 分解与验收标准 |
 
-Bot 平台转型方向文档：[`docs/goals/pivot-to-cognitive-bot-platform.md`](docs/goals/pivot-to-cognitive-bot-platform.md)
+Bot 平台转型方向文档：[`docs/goals/archive/pivot-to-cognitive-bot-platform.md`](docs/goals/archive/pivot-to-cognitive-bot-platform.md)
 
 Runtime 架构文档：[`docs/runtime-architecture.md`](docs/runtime-architecture.md)
 
