@@ -24,7 +24,7 @@ yunluostar 把 Agent 从 `LLM + Prompt + Tools + RAG` 的任务执行器，升�
 |---|------|
 | 语言 / 运行时 | TypeScript + Node.js 20+ |
 | 产品形态 | CLI-first 本地主体型 Agent |
-| CLI | Commander |
+| CLI | Commander + Ink (React TUI) |
 | 结构化存储 | SQLite |
 | 向量检索 | sqlite-vec 优先，LanceDB / Chroma JS client 后续可选 |
 | LLM | OpenAI / Claude / Qwen / Llama API |
@@ -99,28 +99,38 @@ npm run cli -- chat --message "Hello" --json
 
 ### 交互式 Shell
 
-运行 `yunluo` 不带子命令进入交互式 shell：
+运行 `yunluo` 不带子命令进入 Ink TUI 交互式 shell：
 
 ```
-yunluo> 你好！
-Agent: Response to: 你好！
+YUNLUOSTAR v0.1.0  consciousness-like agent
+  model deterministic · session default
 
-yunluo> /help
-Available commands:
-  /help          Show this help message
-  /exit, /quit   Exit the interactive shell
-  /config        Display effective configuration (secrets redacted)
-  /model         Display active provider and model info
-  /session [id]  Show or switch the active session
-  /memory        Show recent semantic memories (read-only)
-  /wm            Show latest working memory snapshot (read-only)
-  /self          Show active self model entries (read-only)
-  /goals         Show active goals (read-only)
-  /reflections   Show recent reflections (read-only)
+yunluo :: > 你好！
+response ─
+    Agent response here...
 
-yunluo> /exit
-Goodbye!
+yunluo :: > /help
+┌─ Command Surface ──────────────────────────────┐
+│ /help           command map                     │
+│ /exit, /quit    leave the shell                 │
+│ /model          provider and model              │
+│ ...                                             │
+└─────────────────────────────────────────────────┘
+
+yunluo :: > /
+  › /help — command map
+    /exit — leave the shell
+    /model — provider and model
+    ...
+  ↑↓ navigate · Tab complete · Enter execute · Esc close
+
+yunluo :: > /exit
 ```
+
+交互式 shell 支持：
+- 输入 `/` 打开命令面板，可用 ↑↓ 键选择、Tab 补全、Enter 执行、Esc 关闭
+- 流式输出直接渲染到对话区域，不会破坏输入行
+- `/exit` 或 `/quit` 或 `Ctrl+C` 退出
 
 ### 配置
 

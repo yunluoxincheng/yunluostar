@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import ora, { type Ora } from "ora";
 import { resolve } from "node:path";
+import { getAllCommands } from "./command-registry.js";
 
 // ─── Color theme (Yunluo cognitive console) ──────────────────
 
@@ -191,19 +192,26 @@ export function formatTrace(trace: {
 
 // ─── Slash command help ──────────────────────────────────────
 
+const CATEGORY_COLORS: Record<string, (s: string) => string> = {
+  system: theme.accent,
+  session: theme.goal,
+  model: theme.accent,
+  memory: theme.memory,
+  goals: theme.goal,
+  reflection: theme.world,
+};
+
 export function formatHelp(): string {
-  const cmds = [
-    [theme.accent("/help"),          "command map"],
-    [theme.accent("/exit, /quit"),   "leave the shell"],
-    [theme.accent("/model"),         "provider and model"],
-    [theme.accent("/config"),        "effective runtime config"],
-    [theme.accent("/session [id]"),  "show or switch session"],
-    [theme.memory("/memory"),        "recent semantic memories"],
-    [theme.self("/self"),            "active self model"],
-    [theme.goal("/goals"),           "active goals"],
-    [theme.world("/reflections"),    "recent reflections"],
-    [theme.accent("/wm"),            "current working memory"],
-  ];
+  const cmds = getAllCommands().map((cmd) => {
+    const color = CATEGORY_COLORS[cmd.category] ?? theme.accent;
+    const label = cmd.aliases?.length
+      ? `${cmd.name}, ${cmd.aliases.join(", ")}`
+      : cmd.name;
+    const display = cmd.requiresArgument
+      ? `${cmd.name} [arg]`
+      : label;
+    return [color(display), cmd.description] as const;
+  });
   const lines = [
     `${theme.title("Command Surface")} ${theme.quiet("chat, inspect, steer")}`,
     "",

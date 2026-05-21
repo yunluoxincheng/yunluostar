@@ -2,8 +2,6 @@ import type { AppConfig } from "../config.js";
 import { loadConfig, redactConfig, getResolvedApiKey } from "../config.js";
 import { createDbConnection, closeDbConnection } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { createLLMClient, createEmbeddingClientFromConfig } from "../llm/factory.js";
-import { createAgentController } from "../agent/controller.js";
 import type { PipelineStage } from "../agent/controller.js";
 import { createSemanticMemoriesRepository } from "../db/semantic-memories-repository.js";
 import { createSelfModelRepository } from "../db/self-model-repository.js";
@@ -14,19 +12,18 @@ import { createReflectionsRepository } from "../db/reflections-repository.js";
 import { createWorkingMemoryRepository } from "../db/working-memory-repository.js";
 import { deserializeWorkingMemory } from "../models/working-memory.js";
 import {
-  banner, promptStr, responsePrefix, responseContinue,
-  formatResponse, footerLine, renderMarkdown,
-  createSpinner, formatTrace, formatHelp, formatError,
+  formatHelp,
   formatModelInfo, formatConfigInfo, formatWorkingMemory,
 } from "./tui.js";
 import chalk from "chalk";
+import { suggestSimilar } from "./command-registry.js";
 
 export interface InteractiveCommandResult {
   action: "chat" | "exit" | "continue" | "error";
   output?: string;
 }
 
-const STAGE_LABELS: Record<PipelineStage, string> = {
+export const STAGE_LABELS: Record<PipelineStage, string> = {
   restoring: "restoring working memory...",
   awakening: "awakening relevant memory...",
   thinking: "integrating context...",
@@ -94,8 +91,14 @@ export class InteractiveRouter {
         return { action: "continue", output: await this.inspectReflections() };
       case "/wm":
         return { action: "continue", output: await this.inspectWorkingMemory() };
-      default:
+      default: {
+        const suggestions = suggestSimilar(command);
+        if (suggestions.length > 0) {
+          const names = suggestions.map((s) => s.name).join(", ");
+          return { action: "error", output: `Unknown command: ${command}. Did you mean: ${names}? Type /help for commands.` };
+        }
         return { action: "error", output: `Unknown command: ${command}. Type /help for commands.` };
+      }
     }
   }
 
@@ -210,112 +213,7 @@ export class InteractiveRouter {
 
 export async function runInteractiveShell(cliOverrides?: Partial<AppConfig>): Promise<void> {
   const config = loadConfig(cliOverrides);
-  const router = new InteractiveRouter(config);
-  const modelLabel = config.model ?? config.provider;
-
-  console.log(banner("0.1.0", config.provider, config.model ?? "default"));
-  console.log(chalk.dim("  /help command surface · /exit close loop"));
-  console.log("");
-
-  const readline = await import("node:readline");
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: promptStr(),
-    historySize: 100,
-    removeHistoryDuplicates: true,
-  });
-
-  rl.on("SIGINT", () => {
-    console.log(chalk.dim("\n  Bye.\n"));
-    rl.close();
-    process.exit(0);
-  });
-
-  rl.prompt();
-
-  rl.on("line", async (line: string) => {
-    const result = await router.route(line);
-
-    switch (result.action) {
-      case "exit":
-        console.log(chalk.dim("  Bye."));
-        rl.close();
-        break;
-      case "chat":
-        if (result.output) {
-          await processChat(result.output, router.getSessionId(), config, modelLabel);
-        }
-        rl.prompt();
-        break;
-      case "continue":
-        if (result.output) console.log(result.output);
-        console.log("");
-        rl.prompt();
-        break;
-      case "error":
-        console.log(formatError(result.output ?? "Unknown error"));
-        console.log("");
-        rl.prompt();
-        break;
-    }
-  });
-}
-
-async function processChat(
-  message: string,
-  sessionId: string,
-  config: AppConfig,
-  modelLabel: string,
-): Promise<void> {
-  const spinner = createSpinner();
-  let responseStarted = false;
-
-  const db = createDbConnection(config.databasePath);
-  try {
-    runMigrations(db);
-    const llm = createLLMClient(config.provider, config);
-    const embeddingClient = createEmbeddingClientFromConfig(config.provider, config);
-    const agent = createAgentController(llm, db, embeddingClient);
-
-    let firstToken = true;
-
-    const result = await agent.chat(message, {
-      sessionId,
-      onToken: (token: string) => {
-        if (firstToken) {
-          spinner.stop();
-          firstToken = false;
-          responseStarted = true;
-          process.stdout.write(responsePrefix());
-        }
-        process.stdout.write(token);
-      },
-      onStage: (stage: PipelineStage) => {
-        if (responseStarted) return;
-        const label = STAGE_LABELS[stage];
-        if (label) spinner.start(label);
-      },
-    });
-
-    if (!responseStarted) {
-      spinner.stop();
-      const rendered = renderMarkdown(result.response);
-      console.log(responsePrefix() + formatResponse(rendered));
-    } else {
-      process.stdout.write("\n");
-    }
-
-    // Compact trace + footer
-    const trace = formatTrace(result.trace);
-    if (trace) console.log(trace);
-    console.log(footerLine(modelLabel, sessionId));
-    console.log("");
-  } catch (err) {
-    spinner.stop();
-    console.log(formatError((err as Error).message));
-    console.log("");
-  } finally {
-    closeDbConnection(db);
-  }
+  const { renderTui } = await import("./tui/app.js");
+  const { waitUntilExit } = renderTui(config);
+  await waitUntilExit();
 }
