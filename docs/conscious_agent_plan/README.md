@@ -1,6 +1,6 @@
 # 主体型 Agent 研究与开发规划
 
-yunluostar 正在从 CLI-first agent 研究原型转型为多平台认知型 Agentic Bot 平台。认知核心（长期记忆、自我模型、用户模型、目标系统、反思、记忆巩固）保持不变，并成为 Bot 平台的产品差异化。
+yunluostar 已完成从 CLI-first agent 研究原型到多平台认知型 Agentic Bot 平台的方向转型。认知核心（长期记忆、自我模型、用户模型、目标系统、反思、记忆巩固）保持不变，并成为 Bot 平台的产品差异化。当前重点是稳定 Bot Platform MVP：显式 adapter contract、非 CLI demo surface、cognitive trace、plugin safety 和 scope isolation。
 
 **产品方向：** 多平台认知型 Bot 平台，用户通过 WebChat、HTTP webhook、IM 适配器等 Bot 接口与 Agent 交互。CLI 保留为 admin/debug/developer 工具。
 
